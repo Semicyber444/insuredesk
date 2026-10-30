@@ -2,7 +2,8 @@
 
 import { SearchFilters } from '@/types/insurance';
 import { Insurer, VehicleModel, CoverageType, InsuranceType, RepairType } from '@/types/database';
-import { Filter, RotateCcw, Search } from 'lucide-react';
+import { Filter, RotateCcw, Search, ChevronDown, ChevronUp } from 'lucide-react';
+import { useState } from 'react';
 
 interface FilterSidebarProps {
   filters: SearchFilters;
@@ -27,6 +28,8 @@ export function FilterSidebar({
   coverageTypes,
   totalResults,
 }: FilterSidebarProps) {
+  const [showAllCoverages, setShowAllCoverages] = useState(false);
+
   const handleReset = () => {
     onFilterChange({
       page: 1,
@@ -58,8 +61,11 @@ export function FilterSidebar({
     onFilterChange({ ...filters, requiredCoverageCodes: next, page: 1 });
   };
 
+  // Group coverages by category
+  const categories = Array.from(new Set(coverageTypes.map((c) => c.category)));
+
   return (
-    <aside className="w-full lg:w-72 bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-6">
+    <aside className="w-full lg:w-80 bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between pb-3 border-b border-slate-100">
         <div className="flex items-center gap-2 text-slate-800 font-bold text-base">
@@ -253,28 +259,45 @@ export function FilterSidebar({
         </label>
       </div>
 
-      {/* 7. Required Coverages (Section 10.2) */}
+      {/* 7. All Required Coverages (Section 10.2: ALL 14 categories) */}
       <div className="space-y-2 pt-2 border-t border-slate-100">
-        <div className="flex flex-col">
-          <label className="text-xs font-semibold text-slate-700">ความคุ้มครองที่ต้องมี (บังคับคุ้มครอง)</label>
-          <span className="text-[10px] text-slate-500">แผนต้องคุ้มครอง ไม่นับที่เป็นตัวเลือกซื้อเพิ่ม</span>
+        <div className="flex items-center justify-between">
+          <div>
+            <label className="text-xs font-semibold text-slate-700 block">
+              ความคุ้มครองที่ต้องมี ({filters.requiredCoverageCodes?.length || 0})
+            </label>
+            <span className="text-[10px] text-slate-500">แผนต้องคุ้มครอง ไม่นับที่เป็นตัวเลือกซื้อเพิ่ม</span>
+          </div>
         </div>
-        <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-          {coverageTypes.slice(0, 6).map((ct) => {
-            const isChecked = (filters.requiredCoverageCodes ?? []).includes(ct.code);
+
+        <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+          {categories.map((cat) => {
+            const typesInCat = coverageTypes.filter((c) => c.category === cat);
             return (
-              <label
-                key={ct.id}
-                className="flex items-start gap-2 text-xs text-slate-700 hover:text-slate-900 cursor-pointer"
-              >
-                <input
-                  type="checkbox"
-                  checked={isChecked}
-                  onChange={() => toggleCoverage(ct.code)}
-                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 mt-0.5"
-                />
-                <span className="line-clamp-1">{ct.name}</span>
-              </label>
+              <div key={cat} className="space-y-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  หมวด{cat}
+                </span>
+                <div className="space-y-1">
+                  {typesInCat.map((ct) => {
+                    const isChecked = (filters.requiredCoverageCodes ?? []).includes(ct.code);
+                    return (
+                      <label
+                        key={ct.id}
+                        className="flex items-start gap-2 text-xs text-slate-700 hover:text-slate-900 cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => toggleCoverage(ct.code)}
+                          className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 mt-0.5"
+                        />
+                        <span className="line-clamp-1">{ct.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
             );
           })}
         </div>
