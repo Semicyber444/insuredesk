@@ -1,0 +1,332 @@
+import {
+  CoverageType,
+  EligibilityRule,
+  Insurer,
+  OptionCoverageOverride,
+  Plan,
+  PlanVersion,
+  PriceOption,
+  SourceDocument,
+  VehicleModel,
+  VersionCoverage,
+  AuditLog
+} from '@/types/database';
+
+export const MOCK_COVERAGE_TYPES: CoverageType[] = [
+  { id: '10000000-0000-0000-0000-000000000001', code: 'own_damage', name: 'ความเสียหายต่อตัวรถยนต์ผู้เอาประกัน', category: 'ตัวรถยนต์', sort_order: 1 },
+  { id: '10000000-0000-0000-0000-000000000002', code: 'theft_fire', name: 'รถยนต์สูญหาย/ไฟไหม้', category: 'ตัวรถยนต์', sort_order: 2 },
+  { id: '10000000-0000-0000-0000-000000000003', code: 'flood', name: 'น้ำท่วม (ภัยธรรมชาติ)', category: 'ตัวรถยนต์', sort_order: 3 },
+  { id: '10000000-0000-0000-0000-000000000004', code: 'windshield', name: 'กระจกบังลมเสียหาย', category: 'ตัวรถยนต์', sort_order: 4 },
+  { id: '10000000-0000-0000-0000-000000000005', code: 'theft_personal_prop', name: 'ทรัพย์สินส่วนบุคคลภายในรถถูกโจรกรรม', category: 'ตัวรถยนต์', sort_order: 5 },
+  { id: '10000000-0000-0000-0000-000000000006', code: 'tp_life_person', name: 'ความรับผิดต่อชีวิต/ร่างกายบุคคลภายนอก (ต่อคน)', category: 'บุคคลภายนอก', sort_order: 6 },
+  { id: '10000000-0000-0000-0000-000000000007', code: 'tp_life_event', name: 'ความรับผิดต่อชีวิต/ร่างกายบุคคลภายนอก (ต่อครั้ง)', category: 'บุคคลภายนอก', sort_order: 7 },
+  { id: '10000000-0000-0000-0000-000000000008', code: 'tp_property', name: 'ความเสียหายต่อทรัพย์สินบุคคลภายนอก', category: 'บุคคลภายนอก', sort_order: 8 },
+  { id: '10000000-0000-0000-0000-000000000009', code: 'pa_driver_passenger', name: 'อุบัติเหตุส่วนบุคคล (ผู้ขับขี่และผู้โดยสาร)', category: 'เอกสารแนบท้าย', sort_order: 9 },
+  { id: '10000000-0000-0000-0000-000000000010', code: 'medical_expenses', name: 'ค่ารักษาพยาบาล', category: 'เอกสารแนบท้าย', sort_order: 10 },
+  { id: '10000000-0000-0000-0000-000000000011', code: 'bail_bond', name: 'การประกันตัวผู้ขับขี่', category: 'เอกสารแนบท้าย', sort_order: 11 },
+  { id: '10000000-0000-0000-0000-000000000012', code: 'roadside_assist', name: 'บริการช่วยเหลือฉุกเฉินบนท้องถนน 24 ชม.', category: 'บริการเสริม', sort_order: 12 },
+  { id: '10000000-0000-0000-0000-000000000013', code: 'towing', name: 'บริการยกรถ/ลากรถฉุกเฉิน', category: 'บริการเสริม', sort_order: 13 },
+  { id: '10000000-0000-0000-0000-000000000014', code: 'loss_of_use', name: 'เงินชดเชยค่าเดินทางระหว่างนำรถเข้าซ่อม', category: 'บริการเสริม', sort_order: 14 },
+];
+
+export const MOCK_INSURERS: Insurer[] = [
+  { id: '20000000-0000-0000-0000-000000000001', name: 'วิริยะประกันภัย', contact_channels: 'โทร 1557 / Call Center 0-2122-2222', website: 'https://www.viriyah.co.th', is_active: true, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+  { id: '20000000-0000-0000-0000-000000000002', name: 'ทิพยประกันภัย', contact_channels: 'โทร 1736', website: 'https://www.dhipaya.co.th', is_active: true, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+  { id: '20000000-0000-0000-0000-000000000003', name: 'กรุงเทพประกันภัย', contact_channels: 'โทร 1620', website: 'https://www.bangkokinsurance.com', is_active: true, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+  { id: '20000000-0000-0000-0000-000000000004', name: 'ธนชาตประกันภัย', contact_channels: 'โทร 0-2662-8999', website: 'https://www.thanachartinsurance.co.th', is_active: true, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+  { id: '20000000-0000-0000-0000-000000000005', name: 'เมืองไทยประกันภัย', contact_channels: 'โทร 1484', website: 'https://www.muangthaiinsurance.com', is_active: true, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+];
+
+export const MOCK_VEHICLE_MODELS: VehicleModel[] = [
+  { id: '30000000-0000-0000-0000-000000000001', brand: 'Toyota', model: 'Corolla Cross', variant: 'HEV Premium Safety', powertrain: 'HEV', is_active: true, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+  { id: '30000000-0000-0000-0000-000000000002', brand: 'Toyota', model: 'Yaris Ativ', variant: 'Smart / Premium', powertrain: 'ICE', is_active: true, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+  { id: '30000000-0000-0000-0000-000000000003', brand: 'Honda', model: 'Civic', variant: 'EL+ / RS (FE)', powertrain: 'ICE', is_active: true, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+  { id: '30000000-0000-0000-0000-000000000004', brand: 'Honda', model: 'City', variant: 'Turbo / e:HEV (GN)', powertrain: 'ICE', is_active: true, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+  { id: '30000000-0000-0000-0000-000000000005', brand: 'BYD', model: 'ATTO 3', variant: 'Standard / Extended Range', powertrain: 'BEV', is_active: true, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+  { id: '30000000-0000-0000-0000-000000000006', brand: 'Isuzu', model: 'D-Max', variant: 'Cab 4 Hi-Lander 1.9 Ddi', powertrain: 'ICE', is_active: true, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+];
+
+export const MOCK_PLANS: Plan[] = [
+  { id: '40000000-0000-0000-0000-000000000001', insurer_id: '20000000-0000-0000-0000-000000000001', name: 'วิริยะ ซุปเปอร์โปรเทค พรีเมียม ชั้น 1', insurance_type: 'ชั้น 1', is_archived: false, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+  { id: '40000000-0000-0000-0000-000000000002', insurer_id: '20000000-0000-0000-0000-000000000003', name: 'กรุงเทพประกันภัย BKI Care 2+ คุ้มครองคุ้มค่า', insurance_type: 'ชั้น 2+', is_archived: false, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+  { id: '40000000-0000-0000-0000-000000000003', insurer_id: '20000000-0000-0000-0000-000000000004', name: 'ธนชาต 2+ ฟิต อุ่นใจ ไม่มีค่าเสียหายส่วนแรก', insurance_type: 'ชั้น 2+', is_archived: false, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+  { id: '40000000-0000-0000-0000-000000000004', insurer_id: '20000000-0000-0000-0000-000000000002', name: 'ทิพย EV Power Safe ประกันภัยรถยนต์ไฟฟ้าชั้น 1', insurance_type: 'ชั้น 1', is_archived: false, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+  { id: '40000000-0000-0000-0000-000000000005', insurer_id: '20000000-0000-0000-0000-000000000005', name: 'เมืองไทย ยิ้มได้ 3+ เซฟเงินในกระเป๋า', insurance_type: 'ชั้น 3+', is_archived: false, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+];
+
+export const MOCK_PLAN_VERSIONS: PlanVersion[] = [
+  { id: '50000000-0000-0000-0000-000000000001', plan_id: '40000000-0000-0000-0000-000000000001', version_no: 1, workflow_status: 'published', effective_from: '2026-01-01', effective_to: '2026-12-31', verified_at: '2026-01-05T10:00:00+07:00', review_due_at: '2026-11-30', notes: 'อัตราเบี้ยปี 2569 ได้รับการอนุมัติแล้ว', created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-05T10:00:00Z' },
+  { id: '50000000-0000-0000-0000-000000000002', plan_id: '40000000-0000-0000-0000-000000000002', version_no: 1, workflow_status: 'published', effective_from: '2026-01-01', effective_to: '2026-12-31', verified_at: '2026-01-10T14:00:00+07:00', review_due_at: '2026-12-01', notes: 'แผน 2+ ซ่อมอู่/ห้างสำหรับรถเก๋งกระบะทั่วไป', created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-10T14:00:00Z' },
+  { id: '50000000-0000-0000-0000-000000000003', plan_id: '40000000-0000-0000-0000-000000000003', version_no: 1, workflow_status: 'published', effective_from: '2026-02-01', effective_to: '2026-12-31', verified_at: '2026-02-03T11:30:00+07:00', review_due_at: '2026-11-15', notes: 'ไม่มีค่าเสียหายส่วนแรกกรณีรถชนรถ', created_at: '2026-02-01T00:00:00Z', updated_at: '2026-02-03T11:30:00Z' },
+  { id: '50000000-0000-0000-0000-000000000004', plan_id: '40000000-0000-0000-0000-000000000004', version_no: 1, workflow_status: 'published', effective_from: '2026-03-01', effective_to: '2026-12-31', verified_at: '2026-03-05T09:15:00+07:00', review_due_at: '2026-12-31', notes: 'ครอบคลุมแบตเตอรี่แรงดันสูงและแท่นชาร์จติดผนัง', created_at: '2026-03-01T00:00:00Z', updated_at: '2026-03-05T09:15:00Z' },
+  { id: '50000000-0000-0000-0000-000000000005', plan_id: '40000000-0000-0000-0000-000000000005', version_no: 1, workflow_status: 'in_review', effective_from: '2026-04-01', effective_to: '2026-12-31', verified_at: null, review_due_at: '2026-12-15', notes: 'รอตรวจสอบตารางอัตราเบี้ยกับเอกสารทางการ', created_at: '2026-04-01T00:00:00Z', updated_at: '2026-04-01T00:00:00Z' },
+];
+
+export const MOCK_ELIGIBILITY_RULES: EligibilityRule[] = [
+  { id: '60000000-0000-0000-0000-000000000001', plan_version_id: '50000000-0000-0000-0000-000000000001', scope_type: 'all_models', vehicle_model_id: null, min_age: 1, max_age: 10, age_basis: 'registration_year', usage_type: 'private', inspection_required: true, notes: 'รถเก๋งและกระบะใช้งานส่วนบุคคล ต้องตรวจสภาพรถก่อนทำประกัน', created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+  { id: '60000000-0000-0000-0000-000000000002', plan_version_id: '50000000-0000-0000-0000-000000000002', scope_type: 'all_models', vehicle_model_id: null, min_age: 1, max_age: 15, age_basis: 'registration_year', usage_type: 'private', inspection_required: false, notes: 'ไม่ตรวจสภาพรถ รับรถกลุ่ม 3, 4, 5', created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+  { id: '60000000-0000-0000-0000-000000000003', plan_version_id: '50000000-0000-0000-0000-000000000003', scope_type: 'all_models', vehicle_model_id: null, min_age: 2, max_age: 20, age_basis: 'registration_year', usage_type: 'private', inspection_required: false, notes: 'รถเก๋ง/กระบะ ไม่ต้องตรวจสภาพ', created_at: '2026-02-01T00:00:00Z', updated_at: '2026-02-01T00:00:00Z' },
+  { id: '60000000-0000-0000-0000-000000000004', plan_version_id: '50000000-0000-0000-0000-000000000004', scope_type: 'specific_model', vehicle_model_id: '30000000-0000-0000-0000-000000000005', min_age: 1, max_age: 5, age_basis: 'registration_year', usage_type: 'private', inspection_required: true, notes: 'เฉพาะ BYD ATTO 3 จดทะเบียนส่วนบุคคล ตรวจสภาพรถก่อนทำประกัน', created_at: '2026-03-01T00:00:00Z', updated_at: '2026-03-01T00:00:00Z' },
+];
+
+export const MOCK_PRICE_OPTIONS: PriceOption[] = [
+  {
+    id: '70000000-0000-0000-0000-000000000001',
+    eligibility_rule_id: '60000000-0000-0000-0000-000000000001',
+    label: 'ซ่อมห้าง - ทุน 600,000 บาท (ไม่ระบุผู้ขับขี่)',
+    repair_type: 'dealer',
+    price_type: 'fixed_for_conditions',
+    net_premium: 18500,
+    tax_stamp: 750,
+    premium_total: 19250,
+    compulsory_included: 'excluded',
+    sum_insured_min: 600000,
+    sum_insured_max: 600000,
+    deductible_amount: 0,
+    deductible_terms: 'ไม่มีค่าเสียหายส่วนแรกกรณีเป็นฝ่ายถูกหรือชนกับยานพาหนะทางบก',
+    driver_conditions: 'ไม่จำกัดชื่อผู้ขับขี่',
+    valid_from: '2026-01-01',
+    valid_to: '2026-12-31',
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z'
+  },
+  {
+    id: '70000000-0000-0000-0000-000000000002',
+    eligibility_rule_id: '60000000-0000-0000-0000-000000000001',
+    label: 'ซ่อมอู่มาตรฐาน - ทุน 500,000 บาท',
+    repair_type: 'garage',
+    price_type: 'fixed_for_conditions',
+    net_premium: 14200,
+    tax_stamp: 580,
+    premium_total: 14780,
+    compulsory_included: 'excluded',
+    sum_insured_min: 500000,
+    sum_insured_max: 500000,
+    deductible_amount: 0,
+    deductible_terms: 'ไม่มีค่าเสียหายส่วนแรกกรณีชนรถ',
+    driver_conditions: 'ไม่จำกัดชื่อผู้ขับขี่',
+    valid_from: '2026-01-01',
+    valid_to: '2026-12-31',
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z'
+  },
+  {
+    id: '70000000-0000-0000-0000-000000000003',
+    eligibility_rule_id: '60000000-0000-0000-0000-000000000001',
+    label: 'ซ่อมอู่ เซฟเบี้ย - มี Deduct 3,000 บาท (ทุน 500,000)',
+    repair_type: 'garage',
+    price_type: 'fixed_for_conditions',
+    net_premium: 11500,
+    tax_stamp: 480,
+    premium_total: 11980,
+    compulsory_included: 'excluded',
+    sum_insured_min: 500000,
+    sum_insured_max: 500000,
+    deductible_amount: 3000,
+    deductible_terms: 'จ่ายค่าเสียหายส่วนแรก 3,000 บาทเมื่อเกิดอุบัติเหตุที่เป็นฝ่ายผิดหรือไม่ทราบคู่กรณี',
+    driver_conditions: 'ไม่จำกัดชื่อผู้ขับขี่',
+    valid_from: '2026-01-01',
+    valid_to: '2026-12-31',
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z'
+  },
+  {
+    id: '70000000-0000-0000-0000-000000000004',
+    eligibility_rule_id: '60000000-0000-0000-0000-000000000002',
+    label: '2+ สบายกระเป๋า ซ่อมอู่ ทุน 200,000 บาท',
+    repair_type: 'garage',
+    price_type: 'fixed_for_conditions',
+    net_premium: 6800,
+    tax_stamp: 275,
+    premium_total: 7075,
+    compulsory_included: 'included',
+    sum_insured_min: 200000,
+    sum_insured_max: 200000,
+    deductible_amount: 0,
+    deductible_terms: 'ไม่มีค่าเสียหายส่วนแรกกรณีชนยานพาหนะทางบก',
+    driver_conditions: null,
+    valid_from: '2026-01-01',
+    valid_to: '2026-12-31',
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z'
+  },
+  {
+    id: '70000000-0000-0000-0000-000000000005',
+    eligibility_rule_id: '60000000-0000-0000-0000-000000000003',
+    label: '2+ ฟิต ทุน 300,000 ซ่อมอู่ในเครือ',
+    repair_type: 'garage',
+    price_type: 'fixed_for_conditions',
+    net_premium: 7500,
+    tax_stamp: 300,
+    premium_total: 7800,
+    compulsory_included: 'excluded',
+    sum_insured_min: 300000,
+    sum_insured_max: 300000,
+    deductible_amount: 0,
+    deductible_terms: null,
+    driver_conditions: null,
+    valid_from: '2026-02-01',
+    valid_to: '2026-12-31',
+    created_at: '2026-02-01T00:00:00Z',
+    updated_at: '2026-02-01T00:00:00Z'
+  },
+  {
+    id: '70000000-0000-0000-0000-000000000006',
+    eligibility_rule_id: '60000000-0000-0000-0000-000000000004',
+    label: 'EV Power Safe ซ่อมห้าง ทุน 700,000 บาท',
+    repair_type: 'dealer',
+    price_type: 'fixed_for_conditions',
+    net_premium: 24500,
+    tax_stamp: 990,
+    premium_total: 25490,
+    compulsory_included: 'excluded',
+    sum_insured_min: 700000,
+    sum_insured_max: 700000,
+    deductible_amount: 0,
+    deductible_terms: null,
+    driver_conditions: 'ระบุผู้ขับขี่อายุ 30 ปีขึ้นไป',
+    valid_from: '2026-03-01',
+    valid_to: '2026-12-31',
+    created_at: '2026-03-01T00:00:00Z',
+    updated_at: '2026-03-01T00:00:00Z'
+  },
+];
+
+export const MOCK_VERSION_COVERAGES: VersionCoverage[] = [
+  // Plan 1 Coverages
+  { id: 'vc-1', plan_version_id: '50000000-0000-0000-0000-000000000001', coverage_type_id: '10000000-0000-0000-0000-000000000001', status: 'covered', limit_amount: null, limit_basis: 'ตามทุนประกัน', deductible_amount: 0, terms: 'คุ้มครองอุบัติเหตุทุกกรณี', exclusions: null, created_at: '', updated_at: '' },
+  { id: 'vc-2', plan_version_id: '50000000-0000-0000-0000-000000000001', coverage_type_id: '10000000-0000-0000-0000-000000000002', status: 'covered', limit_amount: null, limit_basis: 'ตามทุนประกัน', deductible_amount: 0, terms: null, exclusions: null, created_at: '', updated_at: '' },
+  { id: 'vc-3', plan_version_id: '50000000-0000-0000-0000-000000000001', coverage_type_id: '10000000-0000-0000-0000-000000000003', status: 'covered', limit_amount: null, limit_basis: 'ตามทุนประกัน', deductible_amount: 0, terms: 'คุ้มครองความเสียหายจากน้ำท่วม', exclusions: null, created_at: '', updated_at: '' },
+  { id: 'vc-4', plan_version_id: '50000000-0000-0000-0000-000000000001', coverage_type_id: '10000000-0000-0000-0000-000000000006', status: 'covered', limit_amount: 1000000, limit_basis: 'ต่อคน', deductible_amount: 0, terms: null, exclusions: null, created_at: '', updated_at: '' },
+  { id: 'vc-5', plan_version_id: '50000000-0000-0000-0000-000000000001', coverage_type_id: '10000000-0000-0000-0000-000000000007', status: 'covered', limit_amount: 10000000, limit_basis: 'ต่อครั้ง', deductible_amount: 0, terms: null, exclusions: null, created_at: '', updated_at: '' },
+  { id: 'vc-6', plan_version_id: '50000000-0000-0000-0000-000000000001', coverage_type_id: '10000000-0000-0000-0000-000000000008', status: 'covered', limit_amount: 2500000, limit_basis: 'ต่อครั้ง', deductible_amount: 0, terms: null, exclusions: null, created_at: '', updated_at: '' },
+  { id: 'vc-7', plan_version_id: '50000000-0000-0000-0000-000000000001', coverage_type_id: '10000000-0000-0000-0000-000000000009', status: 'covered', limit_amount: 200000, limit_basis: 'ต่อคน (5 ที่นั่ง)', deductible_amount: 0, terms: null, exclusions: null, created_at: '', updated_at: '' },
+  { id: 'vc-8', plan_version_id: '50000000-0000-0000-0000-000000000001', coverage_type_id: '10000000-0000-0000-0000-000000000010', status: 'covered', limit_amount: 200000, limit_basis: 'ต่อคน (5 ที่นั่ง)', deductible_amount: 0, terms: null, exclusions: null, created_at: '', updated_at: '' },
+  { id: 'vc-9', plan_version_id: '50000000-0000-0000-0000-000000000001', coverage_type_id: '10000000-0000-0000-0000-000000000011', status: 'covered', limit_amount: 300000, limit_basis: 'ต่อครั้ง', deductible_amount: 0, terms: null, exclusions: null, created_at: '', updated_at: '' },
+  { id: 'vc-10', plan_version_id: '50000000-0000-0000-0000-000000000001', coverage_type_id: '10000000-0000-0000-0000-000000000012', status: 'covered', limit_amount: null, limit_basis: 'ไม่จำกัดจำนวนครั้ง', deductible_amount: 0, terms: 'ช่วยเหลือฉุกเฉิน 24 ชม.', exclusions: null, created_at: '', updated_at: '' },
+  { id: 'vc-11', plan_version_id: '50000000-0000-0000-0000-000000000001', coverage_type_id: '10000000-0000-0000-0000-000000000013', status: 'covered', limit_amount: 1500, limit_basis: 'ต่อครั้ง (ระยะทางไม่เกิน 50 กม.)', deductible_amount: 0, terms: null, exclusions: null, created_at: '', updated_at: '' },
+  { id: 'vc-12', plan_version_id: '50000000-0000-0000-0000-000000000001', coverage_type_id: '10000000-0000-0000-0000-000000000014', status: 'optional', limit_amount: 500, limit_basis: 'ต่อวัน สูงสุด 3 วัน', deductible_amount: 0, terms: 'ซื้อความคุ้มครองเสริมเพิ่ม 500 บาท', exclusions: null, created_at: '', updated_at: '' },
+
+  // Plan 2 Coverages (2+)
+  { id: 'vc-20', plan_version_id: '50000000-0000-0000-0000-000000000002', coverage_type_id: '10000000-0000-0000-0000-000000000001', status: 'covered', limit_amount: null, limit_basis: 'ตามทุนประกัน (ชนยานพาหนะทางบก)', deductible_amount: 0, terms: 'ต้องมีคู่กรณีเป็นยานพาหนะทางบกเท่านั้น', exclusions: 'ไม่คุ้มครองการชนสิ่งกีดขวาง/พลิกคว่ำเอง', created_at: '', updated_at: '' },
+  { id: 'vc-21', plan_version_id: '50000000-0000-0000-0000-000000000002', coverage_type_id: '10000000-0000-0000-0000-000000000002', status: 'covered', limit_amount: null, limit_basis: 'ตามทุนประกัน', deductible_amount: 0, terms: null, exclusions: null, created_at: '', updated_at: '' },
+  { id: 'vc-22', plan_version_id: '50000000-0000-0000-0000-000000000002', coverage_type_id: '10000000-0000-0000-0000-000000000003', status: 'covered', limit_amount: null, limit_basis: 'ตามทุนประกัน', deductible_amount: 0, terms: 'น้ำท่วมคุ้มครองตามทุน 2+', exclusions: null, created_at: '', updated_at: '' },
+  { id: 'vc-23', plan_version_id: '50000000-0000-0000-0000-000000000002', coverage_type_id: '10000000-0000-0000-0000-000000000006', status: 'covered', limit_amount: 500000, limit_basis: 'ต่อคน', deductible_amount: 0, terms: null, exclusions: null, created_at: '', updated_at: '' },
+  { id: 'vc-24', plan_version_id: '50000000-0000-0000-0000-000000000002', coverage_type_id: '10000000-0000-0000-0000-000000000008', status: 'covered', limit_amount: 1000000, limit_basis: 'ต่อครั้ง', deductible_amount: 0, terms: null, exclusions: null, created_at: '', updated_at: '' },
+  { id: 'vc-25', plan_version_id: '50000000-0000-0000-0000-000000000002', coverage_type_id: '10000000-0000-0000-0000-000000000012', status: 'covered', limit_amount: null, limit_basis: 'บริการฉุกเฉิน', deductible_amount: 0, terms: null, exclusions: null, created_at: '', updated_at: '' },
+
+  // Plan 3 Coverages (2+ Thanachart)
+  { id: 'vc-30', plan_version_id: '50000000-0000-0000-0000-000000000003', coverage_type_id: '10000000-0000-0000-0000-000000000001', status: 'covered', limit_amount: null, limit_basis: 'ตามทุนประกัน (รถชนรถ)', deductible_amount: 0, terms: 'คุ้มครองเฉพาะชนยานพาหนะทางบก', exclusions: null, created_at: '', updated_at: '' },
+  { id: 'vc-31', plan_version_id: '50000000-0000-0000-0000-000000000003', coverage_type_id: '10000000-0000-0000-0000-000000000002', status: 'covered', limit_amount: null, limit_basis: 'ตามทุนประกัน', deductible_amount: 0, terms: null, exclusions: null, created_at: '', updated_at: '' },
+  { id: 'vc-32', plan_version_id: '50000000-0000-0000-0000-000000000003', coverage_type_id: '10000000-0000-0000-0000-000000000003', status: 'not_covered', limit_amount: null, limit_basis: null, deductible_amount: 0, terms: 'ไม่คุ้มครองภัยน้ำท่วม', exclusions: 'ยกเว้นภัยธรรมชาติ', created_at: '', updated_at: '' },
+  { id: 'vc-33', plan_version_id: '50000000-0000-0000-0000-000000000003', coverage_type_id: '10000000-0000-0000-0000-000000000006', status: 'covered', limit_amount: 500000, limit_basis: 'ต่อคน', deductible_amount: 0, terms: null, exclusions: null, created_at: '', updated_at: '' },
+  { id: 'vc-34', plan_version_id: '50000000-0000-0000-0000-000000000003', coverage_type_id: '10000000-0000-0000-0000-000000000008', status: 'covered', limit_amount: 1000000, limit_basis: 'ต่อครั้ง', deductible_amount: 0, terms: null, exclusions: null, created_at: '', updated_at: '' },
+
+  // Plan 4 Coverages (EV)
+  { id: 'vc-40', plan_version_id: '50000000-0000-0000-0000-000000000004', coverage_type_id: '10000000-0000-0000-0000-000000000001', status: 'covered', limit_amount: null, limit_basis: 'ตามทุนประกัน รวมแบตเตอรี่ EV', deductible_amount: 0, terms: 'คุ้มครองแบตเตอรี่แรงดันสูงและสายชาร์จติดรถ', exclusions: null, created_at: '', updated_at: '' },
+  { id: 'vc-41', plan_version_id: '50000000-0000-0000-0000-000000000004', coverage_type_id: '10000000-0000-0000-0000-000000000002', status: 'covered', limit_amount: null, limit_basis: 'ตามทุนประกัน', deductible_amount: 0, terms: null, exclusions: null, created_at: '', updated_at: '' },
+  { id: 'vc-42', plan_version_id: '50000000-0000-0000-0000-000000000004', coverage_type_id: '10000000-0000-0000-0000-000000000003', status: 'covered', limit_amount: null, limit_basis: 'ตามทุนประกัน', deductible_amount: 0, terms: 'น้ำท่วมคุ้มครอง 100%', exclusions: null, created_at: '', updated_at: '' },
+  { id: 'vc-43', plan_version_id: '50000000-0000-0000-0000-000000000004', coverage_type_id: '10000000-0000-0000-0000-000000000008', status: 'covered', limit_amount: 5000000, limit_basis: 'ต่อครั้ง', deductible_amount: 0, terms: null, exclusions: null, created_at: '', updated_at: '' },
+  { id: 'vc-44', plan_version_id: '50000000-0000-0000-0000-000000000004', coverage_type_id: '10000000-0000-0000-0000-000000000012', status: 'covered', limit_amount: null, limit_basis: 'พิเศษ บริการชาร์จไฟฉุกเฉินนอกสถานที่', deductible_amount: 0, terms: 'มี Mobile EV Charging unit', exclusions: null, created_at: '', updated_at: '' },
+];
+
+export const MOCK_OPTION_COVERAGE_OVERRIDES: OptionCoverageOverride[] = [
+  // For Viriyah Option 3 (Option with 3000 deductible override on own damage)
+  {
+    id: 'oco-1',
+    price_option_id: '70000000-0000-0000-0000-000000000003',
+    coverage_type_id: '10000000-0000-0000-0000-000000000001',
+    status: 'covered',
+    limit_amount: null,
+    limit_basis: 'ตามทุนประกัน (มีค่าเสียหายส่วนแรก)',
+    deductible_amount: 3000,
+    terms: 'ผู้เอาประกันรับผิดชอบค่าเสียหายส่วนแรก 3,000 บาทแรกต่ออุบัติเหตุที่เป็นฝ่ายผิด',
+    exclusions: null,
+    created_at: '',
+    updated_at: ''
+  }
+];
+
+export const MOCK_SOURCE_DOCUMENTS: SourceDocument[] = [
+  {
+    id: '80000000-0000-0000-0000-000000000001',
+    plan_version_id: '50000000-0000-0000-0000-000000000001',
+    source_type: 'rate_sheet',
+    storage_path: 'documents/viriyah/superprotect_2026_rates.pdf',
+    source_url: null,
+    title: 'ตารางอัตราเบี้ยประกันภัยวิริยะ ซุปเปอร์โปรเทค 2569 (เอกสารภายใน)',
+    file_size: 1450200,
+    mime_type: 'application/pdf',
+    page_reference: 'หน้า 3-5 ตารางเบี้ยรถกลุ่ม 3, 4',
+    received_at: '2026-01-02',
+    created_at: '2026-01-02T00:00:00Z',
+    created_by: null,
+  },
+  {
+    id: '80000000-0000-0000-0000-000000000002',
+    plan_version_id: '50000000-0000-0000-0000-000000000002',
+    source_type: 'brochure',
+    storage_path: 'documents/bki/bki_care_2plus_brochure.pdf',
+    source_url: null,
+    title: 'โบรชัวร์และตารางความคุ้มครอง BKI Care 2+',
+    file_size: 892000,
+    mime_type: 'application/pdf',
+    page_reference: 'หน้า 2 เงื่อนไขการรับประกัน',
+    received_at: '2026-01-08',
+    created_at: '2026-01-08T00:00:00Z',
+    created_by: null,
+  },
+  {
+    id: '80000000-0000-0000-0000-000000000003',
+    plan_version_id: '50000000-0000-0000-0000-000000000004',
+    source_type: 'rate_sheet',
+    storage_path: 'documents/dhipaya/ev_powersafe_ratesheet.pdf',
+    source_url: null,
+    title: 'เอกสารแนบท้ายแพ็กเกจ EV Power Safe สำหรับรถยนต์ไฟฟ้า',
+    file_size: 2150000,
+    mime_type: 'application/pdf',
+    page_reference: 'หน้า 1 ข้อกำหนดแบตเตอรี่',
+    received_at: '2026-03-01',
+    created_at: '2026-03-01T00:00:00Z',
+    created_by: null,
+  },
+];
+
+export const MOCK_AUDIT_LOGS: AuditLog[] = [
+  {
+    id: '90000000-0000-0000-0000-000000000001',
+    actor_id: '00000000-0000-0000-0000-000000000001',
+    actor_name: 'สมชาย ผู้ดูแลระบบ',
+    action: 'publish',
+    entity_type: 'plan_version',
+    entity_id: '50000000-0000-0000-0000-000000000001',
+    before_data: { workflow_status: 'in_review' },
+    after_data: { workflow_status: 'published' },
+    reason: 'ตรวจสอบข้อมูลกับตารางเบี้ยต้นทางเรียบร้อย ข้อมูลครบถ้วนถูกต้อง',
+    created_at: '2026-01-05T10:00:00+07:00'
+  },
+  {
+    id: '90000000-0000-0000-0000-000000000002',
+    actor_id: '00000000-0000-0000-0000-000000000001',
+    actor_name: 'สมชาย ผู้ดูแลระบบ',
+    action: 'publish',
+    entity_type: 'plan_version',
+    entity_id: '50000000-0000-0000-0000-000000000002',
+    before_data: { workflow_status: 'in_review' },
+    after_data: { workflow_status: 'published' },
+    reason: 'ผ่านการตรวจสอบเงื่อนไข 2+ เรียบร้อย',
+    created_at: '2026-01-10T14:00:00+07:00'
+  },
+  {
+    id: '90000000-0000-0000-0000-000000000003',
+    actor_id: '00000000-0000-0000-0000-000000000002',
+    actor_name: 'กัญญา เจ้าหน้าที่กรอกข้อมูล',
+    action: 'submit_review',
+    entity_type: 'plan_version',
+    entity_id: '50000000-0000-0000-0000-000000000005',
+    before_data: { workflow_status: 'draft' },
+    after_data: { workflow_status: 'in_review' },
+    reason: 'กรอกข้อมูลเบื้องต้นและแนบเอกสารแล้ว รอผู้ตรวจสอบตรวจทาน',
+    created_at: '2026-04-01T15:30:00+07:00'
+  }
+];
