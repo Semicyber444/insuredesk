@@ -3,14 +3,17 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { getAllPlans, submitForReview } from '@/lib/queries/plans';
-import { FileText, Plus, Send, ExternalLink, Clock, CheckCircle2, History } from 'lucide-react';
+import { InsuranceStore } from '@/lib/store/insuranceStore';
+import { PlanFormModal } from '@/components/forms/PlanFormModal';
+import { FileText, Plus, Send, ExternalLink, Clock, CheckCircle2, Edit3, Trash2 } from 'lucide-react';
 
 export default function PlansManagementPage() {
   const [plans, setPlans] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [submitModal, setSubmitModal] = useState<{ planId: string; versionId: string; planName: string } | null>(null);
-  const [submitReason, setSubmitReason] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingPlan, setEditingPlan] = useState<any>(null);
 
   const loadData = () => {
     setIsLoading(true);
@@ -24,18 +27,20 @@ export default function PlansManagementPage() {
     loadData();
   }, []);
 
-  const handleSubmitReview = async () => {
-    if (!submitModal || !submitReason.trim()) return;
-    setIsSubmitting(true);
-    try {
-      await submitForReview(submitModal.versionId, submitReason);
-      setSubmitModal(null);
-      setSubmitReason('');
+  const handleOpenCreate = () => {
+    setEditingPlan(null);
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEdit = (plan: any) => {
+    setEditingPlan(plan);
+    setIsModalOpen(true);
+  };
+
+  const handleDelete = (planId: string, name: string) => {
+    if (confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบแพ็กเกจ "${name}"?`)) {
+      InsuranceStore.deletePlan(planId);
       loadData();
-    } catch (e: any) {
-      alert(e.message || 'เกิดข้อผิดพลาด');
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -49,12 +54,12 @@ export default function PlansManagementPage() {
             <span>จัดการแพ็กเกจและข้อมูลร่าง (Plans Management)</span>
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            บันทึกข้อมูลแพ็กเกจ รุ่นเงื่อนไข ราคา และเอกสารอ้างอิง
+            บันทึก แก้ไขข้อมูลแพ็กเกจ รุ่นเงื่อนไข ราคา และเอกสารอ้างอิง
           </p>
         </div>
 
         <button
-          onClick={() => alert('เปิดแบบฟอร์มสร้างแพ็กเกจใหม่ (New Plan Wizard)')}
+          onClick={handleOpenCreate}
           className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-xs transition self-start sm:self-auto cursor-pointer"
         >
           <Plus className="w-4 h-4" />
@@ -110,13 +115,31 @@ export default function PlansManagementPage() {
                       )}
                     </td>
                     <td className="p-4 text-right space-x-2">
+                      <button
+                        onClick={() => handleOpenEdit(plan)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-100 font-semibold cursor-pointer"
+                        title="แก้ไขข้อมูลแพ็กเกจ"
+                      >
+                        <Edit3 className="w-3.5 h-3.5 text-blue-600" />
+                        <span>แก้ไข</span>
+                      </button>
+
                       <Link
                         href={`/plans/${plan.id}`}
-                        className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 font-bold"
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 text-blue-600 hover:bg-blue-50 font-semibold"
+                        title="ดูรายละเอียดฉบับเต็ม"
                       >
                         <span>เปิดดู</span>
-                        <ExternalLink className="w-3 h-3" />
+                        <ExternalLink className="w-3.5 h-3.5" />
                       </Link>
+
+                      <button
+                        onClick={() => handleDelete(plan.id, plan.name)}
+                        className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg border border-red-100 text-red-600 hover:bg-red-50 cursor-pointer"
+                        title="ลบแพ็กเกจ"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -125,6 +148,14 @@ export default function PlansManagementPage() {
           </div>
         )}
       </div>
+
+      {/* Plan Form Modal for Create & Edit */}
+      <PlanFormModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSaved={loadData}
+        initialPlan={editingPlan}
+      />
     </div>
   );
 }

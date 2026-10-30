@@ -1,32 +1,91 @@
-import { notFound } from 'next/navigation';
+'use client';
+
+import { useState, useEffect, use } from 'react';
 import Link from 'next/link';
 import { getPlanById } from '@/lib/queries/plans';
-import { resolveCoverages, buildSearchResultItems } from '@/lib/queries/search';
-import { MOCK_SOURCE_DOCUMENTS, MOCK_ELIGIBILITY_RULES, MOCK_PRICE_OPTIONS, MOCK_VEHICLE_MODELS, MOCK_AUDIT_LOGS } from '@/lib/queries/mockData';
-import { ArrowLeft, Shield, FileText, CheckCircle2, Clock, History, AlertCircle, Building, Car, ExternalLink } from 'lucide-react';
+import { resolveCoverages } from '@/lib/queries/search';
+import { InsuranceStore } from '@/lib/store/insuranceStore';
+import { PlanFormModal } from '@/components/forms/PlanFormModal';
+import {
+  ArrowLeft,
+  Shield,
+  FileText,
+  CheckCircle2,
+  Clock,
+  History,
+  Car,
+  ExternalLink,
+  Edit3
+} from 'lucide-react';
 
 interface Props {
   params: Promise<{ id: string }>;
   searchParams: Promise<{ optionId?: string }>;
 }
 
-export default async function PlanDetailPage({ params, searchParams }: Props) {
-  const { id } = await params;
-  const { optionId } = await searchParams;
+export default function PlanDetailPage({ params, searchParams }: Props) {
+  const resolvedParams = use(params);
+  const resolvedSearchParams = use(searchParams);
 
-  const plan = await getPlanById(id);
+  const planId = resolvedParams.id;
+  const initialOptionId = resolvedSearchParams.optionId;
+
+  const [plan, setPlan] = useState<any>(null);
+  const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const loadData = () => {
+    setIsLoading(true);
+    getPlanById(planId).then((res) => {
+      setPlan(res);
+      setIsLoading(false);
+    });
+  };
+
+  useEffect(() => {
+    loadData();
+  }, [planId]);
+
+  if (isLoading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-16 text-center text-sm text-slate-500">
+        กำลังโหลดข้อมูลแพ็กเกจ...
+      </div>
+    );
+  }
+
   if (!plan) {
-    notFound();
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-16 text-center">
+        <h2 className="text-lg font-bold text-slate-800">ไม่พบแพ็กเกจที่ระบุ</h2>
+        <Link href="/search" className="text-xs text-blue-600 hover:underline mt-2 inline-block">
+          กลับไปหน้ารายการค้นหา
+        </Link>
+      </div>
+    );
   }
 
   const latestVersion = plan.versions[0];
-  const rules = MOCK_ELIGIBILITY_RULES.filter((r) => r.plan_version_id === latestVersion?.id);
+  const allRules = InsuranceStore.getEligibilityRules();
+  const rules = allRules.filter((r) => r.plan_version_id === latestVersion?.id);
   const ruleIds = rules.map((r) => r.id);
-  const options = MOCK_PRICE_OPTIONS.filter((o) => ruleIds.includes(o.eligibility_rule_id));
-  const docs = MOCK_SOURCE_DOCUMENTS.filter((d) => d.plan_version_id === latestVersion?.id);
-  const auditLogs = MOCK_AUDIT_LOGS.filter((a) => a.entity_id === latestVersion?.id || a.entity_id === plan.id);
 
-  const selectedOption = options.find((o) => o.id === optionId) || options[0];
+  const allOptions = InsuranceStore.getPriceOptions();
+  const options = allOptions.filter((o) => ruleIds.includes(o.eligibility_rule_id));
+
+  const allDocs = InsuranceStore.getDocuments();
+  const docs = allDocs.filter((d) => d.plan_version_id === latestVersion?.id);
+
+  const allAudit = InsuranceStore.getAuditLogs();
+  const auditLogs = allAudit.filter(
+    (a) => a.entity_id === latestVersion?.id || a.entity_id === plan.id
+  );
+
+  const vehicleModels = InsuranceStore.getVehicleModels();
+
+  const activeOptionId = selectedOptionId || initialOptionId || options[0]?.id;
+  const selectedOption = options.find((o) => o.id === activeOptionId) || options[0];
   const coverages = latestVersion && selectedOption ? resolveCoverages(latestVersion.id, selectedOption.id) : [];
 
   return (
@@ -64,6 +123,14 @@ export default async function PlanDetailPage({ params, searchParams }: Props) {
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsEditModalOpen(true)}
+              className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+            >
+              <Edit3 className="w-3.5 h-3.5 text-blue-600" />
+              <span>แก้ไขข้อมูลแพ็กเกจ</span>
+            </button>
+
             {selectedOption && (
               <Link
                 href={`/compare?ids=${selectedOption.id}`}
@@ -81,7 +148,7 @@ export default async function PlanDetailPage({ params, searchParams }: Props) {
             <History className="w-3.5 h-3.5" />
             ประวัติรุ่น (Versions):
           </span>
-          {plan.versions.map((ver) => (
+          {plan.versions.map((ver: any) => (
             <div
               key={ver.id}
               className={`px-3 py-1 rounded-lg border font-medium flex items-center gap-1.5 ${
@@ -109,7 +176,7 @@ export default async function PlanDetailPage({ params, searchParams }: Props) {
             </h3>
             {rules.map((r) => {
               const vehicle = r.vehicle_model_id
-                ? MOCK_VEHICLE_MODELS.find((v) => v.id === r.vehicle_model_id)
+                ? vehicleModels.find((v) => v.id === r.vehicle_model_id)
                 : null;
               return (
                 <div key={r.id} className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs space-y-1">
@@ -136,10 +203,11 @@ export default async function PlanDetailPage({ params, searchParams }: Props) {
               {options.map((opt) => {
                 const isCurrent = opt.id === selectedOption?.id;
                 return (
-                  <Link
+                  <button
                     key={opt.id}
-                    href={`/plans/${plan.id}?optionId=${opt.id}`}
-                    className={`block p-3 rounded-xl border transition ${
+                    type="button"
+                    onClick={() => setSelectedOptionId(opt.id)}
+                    className={`w-full text-left p-3 rounded-xl border transition cursor-pointer ${
                       isCurrent
                         ? 'bg-blue-50/70 border-blue-500 ring-1 ring-blue-500'
                         : 'bg-slate-50/50 border-slate-200 hover:bg-slate-100'
@@ -158,7 +226,7 @@ export default async function PlanDetailPage({ params, searchParams }: Props) {
                         <span className="text-amber-700">• Deduct ฿{opt.deductible_amount.toLocaleString()}</span>
                       )}
                     </div>
-                  </Link>
+                  </button>
                 );
               })}
             </div>
@@ -264,6 +332,14 @@ export default async function PlanDetailPage({ params, searchParams }: Props) {
           </div>
         </div>
       </div>
+
+      {/* Edit Modal */}
+      <PlanFormModal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        onSaved={loadData}
+        initialPlan={plan}
+      />
     </div>
   );
 }

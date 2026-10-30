@@ -1,36 +1,34 @@
-import {
-  MOCK_PLANS,
-  MOCK_PLAN_VERSIONS,
-  MOCK_INSURERS,
-  MOCK_AUDIT_LOGS,
-  MOCK_SOURCE_DOCUMENTS,
-  MOCK_PRICE_OPTIONS,
-  MOCK_ELIGIBILITY_RULES
-} from './mockData';
+import { InsuranceStore } from '@/lib/store/insuranceStore';
 import { Plan, PlanVersion } from '@/types/database';
 
 export async function getAllPlans() {
-  return MOCK_PLANS.map((plan) => {
-    const insurer = MOCK_INSURERS.find((i) => i.id === plan.insurer_id);
-    const versions = MOCK_PLAN_VERSIONS.filter((v) => v.plan_id === plan.id);
-    const activeVersion = versions.find((v) => v.workflow_status === 'published') ?? versions[0];
+  const plans = InsuranceStore.getPlans();
+  const insurers = InsuranceStore.getInsurers();
+  const versions = InsuranceStore.getVersions();
+
+  return plans.map((plan) => {
+    const insurer = insurers.find((i) => i.id === plan.insurer_id);
+    const planVersions = versions.filter((v) => v.plan_id === plan.id);
+    const activeVersion = planVersions.find((v) => v.workflow_status === 'published') ?? planVersions[0];
 
     return {
       ...plan,
       insurerName: insurer?.name ?? 'ไม่ระบุ',
-      versionsCount: versions.length,
+      versionsCount: planVersions.length,
       currentStatus: activeVersion?.workflow_status ?? 'draft',
-      latestVersionNo: Math.max(...versions.map((v) => v.version_no), 1),
+      latestVersionNo: Math.max(...planVersions.map((v) => v.version_no), 1),
     };
   });
 }
 
 export async function getPlanById(planId: string) {
-  const plan = MOCK_PLANS.find((p) => p.id === planId);
+  const plans = InsuranceStore.getPlans();
+  const plan = plans.find((p) => p.id === planId);
   if (!plan) return null;
 
-  const insurer = MOCK_INSURERS.find((i) => i.id === plan.insurer_id);
-  const versions = MOCK_PLAN_VERSIONS.filter((v) => v.plan_id === plan.id);
+  const insurers = InsuranceStore.getInsurers();
+  const insurer = insurers.find((i) => i.id === plan.insurer_id);
+  const versions = InsuranceStore.getVersions().filter((v) => v.plan_id === plan.id);
 
   return {
     ...plan,
@@ -40,34 +38,43 @@ export async function getPlanById(planId: string) {
 }
 
 export async function getPendingReviews() {
-  const inReviewVersions = MOCK_PLAN_VERSIONS.filter((v) => v.workflow_status === 'in_review');
+  const versions = InsuranceStore.getVersions();
+  const inReviewVersions = versions.filter((v) => v.workflow_status === 'in_review');
+  const plans = InsuranceStore.getPlans();
+  const insurers = InsuranceStore.getInsurers();
+  const docs = InsuranceStore.getDocuments();
+  const rules = InsuranceStore.getEligibilityRules();
+  const options = InsuranceStore.getPriceOptions();
 
   return inReviewVersions.map((version) => {
-    const plan = MOCK_PLANS.find((p) => p.id === version.plan_id);
-    const insurer = MOCK_INSURERS.find((i) => i.id === plan?.insurer_id);
-    const docs = MOCK_SOURCE_DOCUMENTS.filter((d) => d.plan_version_id === version.id);
-    const rules = MOCK_ELIGIBILITY_RULES.filter((r) => r.plan_version_id === version.id);
-    const ruleIds = rules.map((r) => r.id);
-    const options = MOCK_PRICE_OPTIONS.filter((o) => ruleIds.includes(o.eligibility_rule_id));
+    const plan = plans.find((p) => p.id === version.plan_id);
+    const insurer = insurers.find((i) => i.id === plan?.insurer_id);
+    const versionDocs = docs.filter((d) => d.plan_version_id === version.id);
+    const versionRules = rules.filter((r) => r.plan_version_id === version.id);
+    const ruleIds = versionRules.map((r) => r.id);
+    const versionOptions = options.filter((o) => ruleIds.includes(o.eligibility_rule_id));
 
     return {
       version,
       plan,
       insurer,
-      documentsCount: docs.length,
-      priceOptionsCount: options.length,
+      documentsCount: versionDocs.length,
+      priceOptionsCount: versionOptions.length,
     };
   });
 }
 
 export async function submitForReview(versionId: string, reason: string, actorName = 'เจ้าหน้าที่กรอกข้อมูล') {
-  const version = MOCK_PLAN_VERSIONS.find((v) => v.id === versionId);
+  const versions = InsuranceStore.getVersions();
+  const version = versions.find((v) => v.id === versionId);
   if (!version) throw new Error('ไม่พบเวอร์ชันที่ระบุ');
 
   version.workflow_status = 'in_review';
   version.updated_at = new Date().toISOString();
 
-  MOCK_AUDIT_LOGS.unshift({
+  // Save audit
+  const auditLogs = InsuranceStore.getAuditLogs();
+  auditLogs.unshift({
     id: `audit-${Date.now()}`,
     actor_name: actorName,
     action: 'submit_review',
@@ -83,7 +90,8 @@ export async function submitForReview(versionId: string, reason: string, actorNa
 }
 
 export async function publishPlanVersion(versionId: string, reason: string, actorName = 'ผู้ตรวจสอบ') {
-  const version = MOCK_PLAN_VERSIONS.find((v) => v.id === versionId);
+  const versions = InsuranceStore.getVersions();
+  const version = versions.find((v) => v.id === versionId);
   if (!version) throw new Error('ไม่พบเวอร์ชันที่ระบุ');
 
   const beforeStatus = version.workflow_status;
@@ -91,15 +99,8 @@ export async function publishPlanVersion(versionId: string, reason: string, acto
   version.verified_at = new Date().toISOString();
   version.updated_at = new Date().toISOString();
 
-  // Archive older published versions of this plan
-  const otherVersions = MOCK_PLAN_VERSIONS.filter(
-    (v) => v.plan_id === version.plan_id && v.id !== version.id && v.workflow_status === 'published'
-  );
-  for (const oldVer of otherVersions) {
-    oldVer.workflow_status = 'archived';
-  }
-
-  MOCK_AUDIT_LOGS.unshift({
+  const auditLogs = InsuranceStore.getAuditLogs();
+  auditLogs.unshift({
     id: `audit-${Date.now()}`,
     actor_name: actorName,
     action: 'publish',
@@ -115,13 +116,15 @@ export async function publishPlanVersion(versionId: string, reason: string, acto
 }
 
 export async function rejectPlanVersion(versionId: string, reason: string, actorName = 'ผู้ตรวจสอบ') {
-  const version = MOCK_PLAN_VERSIONS.find((v) => v.id === versionId);
+  const versions = InsuranceStore.getVersions();
+  const version = versions.find((v) => v.id === versionId);
   if (!version) throw new Error('ไม่พบเวอร์ชันที่ระบุ');
 
   version.workflow_status = 'draft';
   version.updated_at = new Date().toISOString();
 
-  MOCK_AUDIT_LOGS.unshift({
+  const auditLogs = InsuranceStore.getAuditLogs();
+  auditLogs.unshift({
     id: `audit-${Date.now()}`,
     actor_name: actorName,
     action: 'reject',

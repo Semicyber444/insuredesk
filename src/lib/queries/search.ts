@@ -3,32 +3,22 @@ import {
   InsuranceSearchResultItem,
   SearchFilters
 } from '@/types/insurance';
-import {
-  MOCK_COVERAGE_TYPES,
-  MOCK_ELIGIBILITY_RULES,
-  MOCK_INSURERS,
-  MOCK_OPTION_COVERAGE_OVERRIDES,
-  MOCK_PLANS,
-  MOCK_PLAN_VERSIONS,
-  MOCK_PRICE_OPTIONS,
-  MOCK_SOURCE_DOCUMENTS,
-  MOCK_VEHICLE_MODELS,
-  MOCK_VERSION_COVERAGES
-} from './mockData';
+import { InsuranceStore } from '@/lib/store/insuranceStore';
 
 // Helper to resolve coverages for a given price_option and plan_version
 export function resolveCoverages(
   planVersionId: string,
   priceOptionId: string
 ): CoverageResolvedItem[] {
-  const versionCoverages = MOCK_VERSION_COVERAGES.filter(
+  const versionCoverages = InsuranceStore.getVersionCoverages().filter(
     (vc) => vc.plan_version_id === planVersionId
   );
-  const overrides = MOCK_OPTION_COVERAGE_OVERRIDES.filter(
+  const overrides = InsuranceStore.getOverrides().filter(
     (o) => o.price_option_id === priceOptionId
   );
+  const coverageTypes = InsuranceStore.getCoverageTypes();
 
-  return MOCK_COVERAGE_TYPES.map((type) => {
+  return coverageTypes.map((type) => {
     const override = overrides.find((o) => o.coverage_type_id === type.id);
     if (override) {
       return {
@@ -61,8 +51,8 @@ export function resolveCoverages(
       isOverridden: false,
     };
   }).sort((a, b) => {
-    const typeA = MOCK_COVERAGE_TYPES.find((t) => t.id === a.coverageTypeId)?.sort_order ?? 99;
-    const typeB = MOCK_COVERAGE_TYPES.find((t) => t.id === b.coverageTypeId)?.sort_order ?? 99;
+    const typeA = coverageTypes.find((t) => t.id === a.coverageTypeId)?.sort_order ?? 99;
+    const typeB = coverageTypes.find((t) => t.id === b.coverageTypeId)?.sort_order ?? 99;
     return typeA - typeB;
   });
 }
@@ -71,25 +61,33 @@ export function resolveCoverages(
 export function buildSearchResultItems(): InsuranceSearchResultItem[] {
   const results: InsuranceSearchResultItem[] = [];
 
-  for (const option of MOCK_PRICE_OPTIONS) {
-    const rule = MOCK_ELIGIBILITY_RULES.find((r) => r.id === option.eligibility_rule_id);
+  const priceOptions = InsuranceStore.getPriceOptions();
+  const rules = InsuranceStore.getEligibilityRules();
+  const versions = InsuranceStore.getVersions();
+  const plans = InsuranceStore.getPlans();
+  const insurers = InsuranceStore.getInsurers();
+  const vehicleModels = InsuranceStore.getVehicleModels();
+  const allDocuments = InsuranceStore.getDocuments();
+
+  for (const option of priceOptions) {
+    const rule = rules.find((r) => r.id === option.eligibility_rule_id);
     if (!rule) continue;
 
-    const version = MOCK_PLAN_VERSIONS.find((v) => v.id === rule.plan_version_id);
+    const version = versions.find((v) => v.id === rule.plan_version_id);
     if (!version || version.workflow_status !== 'published') continue;
 
-    const plan = MOCK_PLANS.find((p) => p.id === version.plan_id);
+    const plan = plans.find((p) => p.id === version.plan_id);
     if (!plan || plan.is_archived) continue;
 
-    const insurer = MOCK_INSURERS.find((i) => i.id === plan.insurer_id);
+    const insurer = insurers.find((i) => i.id === plan.insurer_id);
     if (!insurer || !insurer.is_active) continue;
 
     const vehicle = rule.vehicle_model_id
-      ? MOCK_VEHICLE_MODELS.find((v) => v.id === rule.vehicle_model_id)
+      ? vehicleModels.find((v) => v.id === rule.vehicle_model_id)
       : null;
 
     const coverages = resolveCoverages(version.id, option.id);
-    const documents = MOCK_SOURCE_DOCUMENTS.filter((d) => d.plan_version_id === version.id);
+    const documents = allDocuments.filter((d) => d.plan_version_id === version.id);
 
     results.push({
       id: option.id,
@@ -278,7 +276,6 @@ export async function searchInsuranceOptions(filters: SearchFilters = {}) {
   };
 }
 
-// Single option lookup
 export async function getPriceOptionById(priceOptionId: string): Promise<InsuranceSearchResultItem | null> {
   const all = buildSearchResultItems();
   return all.find((item) => item.id === priceOptionId) ?? null;
