@@ -162,10 +162,23 @@ export class InsuranceStore {
     maxCarAge?: number;
     usageType?: string;
     inspectionRequired?: boolean;
-    // Price Option
-    priceOptionLabel: string;
-    repairType: 'dealer' | 'garage';
-    priceType: 'fixed_for_conditions' | 'starting' | 'indicative' | 'unknown';
+    // Price Options (supports multiple tiers for same plan)
+    priceOptions?: {
+      id?: string;
+      label?: string;
+      repairType: 'dealer' | 'garage';
+      priceType?: 'fixed_for_conditions' | 'starting' | 'indicative' | 'unknown';
+      premiumTotal?: number | null;
+      sumInsuredMin?: number | null;
+      sumInsuredMax?: number | null;
+      deductibleAmount?: number;
+      deductibleTerms?: string;
+      driverConditions?: string;
+      compulsoryIncluded?: 'included' | 'excluded' | 'unspecified';
+    }[];
+    priceOptionLabel?: string;
+    repairType?: 'dealer' | 'garage';
+    priceType?: 'fixed_for_conditions' | 'starting' | 'indicative' | 'unknown';
     premiumTotal?: number | null;
     sumInsuredMin?: number | null;
     sumInsuredMax?: number | null;
@@ -196,7 +209,8 @@ export class InsuranceStore {
     const isEdit = !!payload.planId;
     const planId = payload.planId || `plan-${Date.now()}`;
     const versionId = payload.versionId || `ver-${Date.now()}`;
-    const ruleId = `rule-${Date.now()}`;
+    const existingRule = rules.find((r) => r.plan_version_id === versionId);
+    const ruleId = existingRule ? existingRule.id : `rule-${Date.now()}`;
     const optionId = `opt-${Date.now()}`;
 
     // 1. Update or Create Plan
@@ -287,27 +301,51 @@ export class InsuranceStore {
     cleanRules.push(newRule);
     saveToStorage(STORAGE_KEYS.RULES, cleanRules);
 
-    // 4. Price Option
-    const cleanOptions = options.filter((o) => o.eligibility_rule_id !== ruleId);
-    const newOption: PriceOption = {
-      id: optionId,
-      eligibility_rule_id: ruleId,
-      label: payload.priceOptionLabel || `${payload.repairType === 'dealer' ? 'ซ่อมห้าง' : 'ซ่อมอู่'} - ทุน ${payload.sumInsuredMax?.toLocaleString() || 'ตามเงื่อนไข'}`,
-      repair_type: payload.repairType,
-      price_type: payload.priceType,
-      premium_total: payload.premiumTotal ?? null,
-      sum_insured_min: payload.sumInsuredMin ?? payload.sumInsuredMax ?? 500000,
-      sum_insured_max: payload.sumInsuredMax ?? 500000,
-      deductible_amount: payload.deductibleAmount ?? 0,
-      deductible_terms: payload.deductibleTerms || (payload.deductibleAmount ? `มีค่าเสียหายส่วนแรก ฿${payload.deductibleAmount} กรณีเป็นฝ่ายผิด` : null),
-      driver_conditions: payload.driverConditions || 'ไม่จำกัดชื่อผู้ขับขี่',
-      compulsory_included: payload.compulsoryIncluded || 'excluded',
-      valid_from: '2026-01-01',
-      valid_to: '2026-12-31',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-    cleanOptions.unshift(newOption);
+    // 4. Price Options (supports multiple price options / tiers per package)
+    let cleanOptions = options.filter((o) => o.eligibility_rule_id !== ruleId);
+    if (payload.priceOptions && payload.priceOptions.length > 0) {
+      for (let i = 0; i < payload.priceOptions.length; i++) {
+        const po = payload.priceOptions[i];
+        cleanOptions.push({
+          id: po.id || `opt-${Date.now()}-${i}`,
+          eligibility_rule_id: ruleId,
+          label: po.label || `${po.repairType === 'dealer' ? 'ซ่อมห้าง' : 'ซ่อมอู่'} - ทุน ${(po.sumInsuredMax || 0).toLocaleString()} บาท`,
+          repair_type: po.repairType,
+          price_type: po.priceType || 'fixed_for_conditions',
+          premium_total: po.premiumTotal ?? null,
+          sum_insured_min: po.sumInsuredMin ?? po.sumInsuredMax ?? 500000,
+          sum_insured_max: po.sumInsuredMax ?? 500000,
+          deductible_amount: po.deductibleAmount ?? 0,
+          deductible_terms: po.deductibleTerms || (po.deductibleAmount ? `มีค่าเสียหายส่วนแรก ฿${po.deductibleAmount} กรณีเป็นฝ่ายผิด` : null),
+          driver_conditions: po.driverConditions || 'ไม่จำกัดชื่อผู้ขับขี่',
+          compulsory_included: po.compulsoryIncluded || 'excluded',
+          valid_from: '2026-01-01',
+          valid_to: '2026-12-31',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+      }
+    } else {
+      const newOption: PriceOption = {
+        id: optionId,
+        eligibility_rule_id: ruleId,
+        label: payload.priceOptionLabel || `${payload.repairType === 'dealer' ? 'ซ่อมห้าง' : 'ซ่อมอู่'} - ทุน ${payload.sumInsuredMax?.toLocaleString() || 'ตามเงื่อนไข'}`,
+        repair_type: payload.repairType || 'garage',
+        price_type: payload.priceType || 'fixed_for_conditions',
+        premium_total: payload.premiumTotal ?? null,
+        sum_insured_min: payload.sumInsuredMin ?? payload.sumInsuredMax ?? 500000,
+        sum_insured_max: payload.sumInsuredMax ?? 500000,
+        deductible_amount: payload.deductibleAmount ?? 0,
+        deductible_terms: payload.deductibleTerms || (payload.deductibleAmount ? `มีค่าเสียหายส่วนแรก ฿${payload.deductibleAmount} กรณีเป็นฝ่ายผิด` : null),
+        driver_conditions: payload.driverConditions || 'ไม่จำกัดชื่อผู้ขับขี่',
+        compulsory_included: payload.compulsoryIncluded || 'excluded',
+        valid_from: '2026-01-01',
+        valid_to: '2026-12-31',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      cleanOptions.unshift(newOption);
+    }
     saveToStorage(STORAGE_KEYS.OPTIONS, cleanOptions);
 
     // 5. Version Coverages

@@ -4,7 +4,20 @@ import { useState, useEffect } from 'react';
 import { Insurer, VehicleModel, InsuranceType, RepairType, PriceType, CoverageStatus } from '@/types/database';
 import { InsuranceStore } from '@/lib/store/insuranceStore';
 import { MOCK_COVERAGE_TYPES } from '@/lib/queries/mockData';
-import { X, Save, AlertCircle, Plus, FileText, Check, Sparkles, Layers } from 'lucide-react';
+import {
+  X,
+  Save,
+  AlertCircle,
+  Plus,
+  FileText,
+  Check,
+  Sparkles,
+  Layers,
+  Copy,
+  Trash2,
+  HelpCircle,
+  DollarSign
+} from 'lucide-react';
 
 interface CoverageItemState {
   code: string;
@@ -14,6 +27,20 @@ interface CoverageItemState {
   limitAmount?: number | string;
   limitBasis?: string;
   terms?: string;
+}
+
+export interface PriceOptionItemState {
+  id?: string;
+  label: string;
+  repairType: RepairType;
+  priceType: PriceType;
+  hasPrice: boolean;
+  premiumTotal?: number | string;
+  sumInsuredMax: number | string;
+  deductibleAmount: number | string;
+  deductibleTerms?: string;
+  compulsoryIncluded: 'included' | 'excluded' | 'unspecified';
+  driverConditions?: string;
 }
 
 interface PlanFormModalProps {
@@ -48,17 +75,21 @@ export function PlanFormModal({
   const [inspectionRequired, setInspectionRequired] = useState(false);
   const [ageBasis, setAgeBasis] = useState<'registration_year' | 'manufacture_year'>('registration_year');
 
-  // 3. Price Option
-  const [priceOptionLabel, setPriceOptionLabel] = useState('');
-  const [repairType, setRepairType] = useState<RepairType>('garage');
-  const [priceType, setPriceType] = useState<PriceType>('fixed_for_conditions');
-  const [hasPrice, setHasPrice] = useState(true);
-  const [premiumTotal, setPremiumTotal] = useState<number | string>(15000);
-  const [sumInsured, setSumInsured] = useState<number | string>(500000);
-  const [deductibleAmount, setDeductibleAmount] = useState<number | string>(0);
-  const [deductibleTerms, setDeductibleTerms] = useState('');
-  const [compulsoryIncluded, setCompulsoryIncluded] = useState<'included' | 'excluded' | 'unspecified'>('excluded');
-  const [driverConditions, setDriverConditions] = useState('ไม่จำกัดชื่อผู้ขับขี่');
+  // 3. Price Options (Multiple tiers per plan!)
+  const [priceOptionsList, setPriceOptionsList] = useState<PriceOptionItemState[]>([
+    {
+      label: 'ซ่อมอู่ - ทุน 50,000',
+      repairType: 'garage',
+      priceType: 'fixed_for_conditions',
+      hasPrice: true,
+      premiumTotal: 5400,
+      sumInsuredMax: 50000,
+      deductibleAmount: 0,
+      deductibleTerms: '',
+      compulsoryIncluded: 'excluded',
+      driverConditions: 'ไม่จำกัดชื่อผู้ขับขี่',
+    },
+  ]);
 
   // 4. All 14 Standard Coverages
   const [coveragesState, setCoveragesState] = useState<CoverageItemState[]>([]);
@@ -196,21 +227,26 @@ export function PlanFormModal({
             setMaxCarAge(rule.max_age ?? 10);
             setUsageType(rule.usage_type as any || 'private');
             setInspectionRequired(rule.inspection_required ?? false);
-          }
 
-          const options = InsuranceStore.getPriceOptions().filter((o) => rule && o.eligibility_rule_id === rule.id);
-          const option = options[0];
-          if (option) {
-            setPriceOptionLabel(option.label || '');
-            setRepairType(option.repair_type);
-            setPriceType(option.price_type);
-            setHasPrice(option.premium_total !== null && option.premium_total !== undefined);
-            setPremiumTotal(option.premium_total ?? 15000);
-            setSumInsured(option.sum_insured_max ?? 500000);
-            setDeductibleAmount(option.deductible_amount ?? 0);
-            setDeductibleTerms(option.deductible_terms || '');
-            setCompulsoryIncluded(option.compulsory_included || 'excluded');
-            setDriverConditions(option.driver_conditions || 'ไม่จำกัดชื่อผู้ขับขี่');
+            // Load all price options for this rule!
+            const options = InsuranceStore.getPriceOptions().filter((o) => o.eligibility_rule_id === rule.id);
+            if (options.length > 0) {
+              setPriceOptionsList(
+                options.map((o) => ({
+                  id: o.id,
+                  label: o.label || '',
+                  repairType: o.repair_type,
+                  priceType: o.price_type,
+                  hasPrice: o.premium_total !== null && o.premium_total !== undefined,
+                  premiumTotal: o.premium_total ?? '',
+                  sumInsuredMax: o.sum_insured_max ?? 500000,
+                  deductibleAmount: o.deductible_amount ?? 0,
+                  deductibleTerms: o.deductible_terms || '',
+                  compulsoryIncluded: o.compulsory_included || 'excluded',
+                  driverConditions: o.driver_conditions || 'ไม่จำกัดชื่อผู้ขับขี่',
+                }))
+              );
+            }
           }
 
           // Load version coverages
@@ -249,13 +285,20 @@ export function PlanFormModal({
         setVehicleModelId('');
         setMinCarAge(1);
         setMaxCarAge(10);
-        setRepairType('garage');
-        setPriceType('fixed_for_conditions');
-        setHasPrice(true);
-        setPremiumTotal(15000);
-        setSumInsured(500000);
-        setDeductibleAmount(0);
-        setDeductibleTerms('');
+        setPriceOptionsList([
+          {
+            label: 'ซ่อมอู่ - ทุน 50,000',
+            repairType: 'garage',
+            priceType: 'fixed_for_conditions',
+            hasPrice: true,
+            premiumTotal: 5400,
+            sumInsuredMax: 50000,
+            deductibleAmount: 0,
+            deductibleTerms: '',
+            compulsoryIncluded: 'excluded',
+            driverConditions: 'ไม่จำกัดชื่อผู้ขับขี่',
+          },
+        ]);
         setDocumentTitle('');
         setDocumentRef('');
         applyCoveragePreset('ชั้น 1');
@@ -266,6 +309,75 @@ export function PlanFormModal({
   }, [isOpen, initialPlan]);
 
   if (!isOpen) return null;
+
+  // Add a new price tier
+  const handleAddPriceTier = () => {
+    const lastTier = priceOptionsList[priceOptionsList.length - 1];
+    const newSum = lastTier ? Number(lastTier.sumInsuredMax) + 100000 : 100000;
+    const newPremium = lastTier && lastTier.hasPrice ? Number(lastTier.premiumTotal) + 1000 : 6500;
+    const repair = lastTier ? lastTier.repairType : 'garage';
+
+    setPriceOptionsList((prev) => [
+      ...prev,
+      {
+        label: `${repair === 'dealer' ? 'ซ่อมห้าง' : 'ซ่อมอู่'} - ทุน ${newSum.toLocaleString()}`,
+        repairType: repair,
+        priceType: 'fixed_for_conditions',
+        hasPrice: true,
+        premiumTotal: newPremium,
+        sumInsuredMax: newSum,
+        deductibleAmount: 0,
+        deductibleTerms: '',
+        compulsoryIncluded: 'excluded',
+        driverConditions: 'ไม่จำกัดชื่อผู้ขับขี่',
+      },
+    ]);
+  };
+
+  // Duplicate an existing price tier
+  const handleDuplicateTier = (index: number) => {
+    const source = priceOptionsList[index];
+    const newSum = Number(source.sumInsuredMax) + 50000;
+    const newPremium = source.hasPrice ? Number(source.premiumTotal) + 800 : '';
+
+    setPriceOptionsList((prev) => [
+      ...prev.slice(0, index + 1),
+      {
+        ...source,
+        id: undefined,
+        label: `${source.repairType === 'dealer' ? 'ซ่อมห้าง' : 'ซ่อมอู่'} - ทุน ${newSum.toLocaleString()}`,
+        sumInsuredMax: newSum,
+        premiumTotal: newPremium,
+      },
+      ...prev.slice(index + 1),
+    ]);
+  };
+
+  // Remove a price tier
+  const handleRemoveTier = (index: number) => {
+    if (priceOptionsList.length <= 1) {
+      alert('แพ็กเกจต้องมีตัวเลือกราคาอย่างน้อย 1 รายการ');
+      return;
+    }
+    setPriceOptionsList((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  // Update a field in a price tier
+  const handleUpdateTierField = (index: number, field: keyof PriceOptionItemState, value: any) => {
+    setPriceOptionsList((prev) => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], [field]: value };
+
+      // Auto update label if sum or repair changed and label matches default pattern
+      if (field === 'sumInsuredMax' || field === 'repairType') {
+        const sum = field === 'sumInsuredMax' ? value : copy[index].sumInsuredMax;
+        const rep = field === 'repairType' ? value : copy[index].repairType;
+        copy[index].label = `${rep === 'dealer' ? 'ซ่อมห้าง' : 'ซ่อมอู่'} - ทุน ${Number(sum).toLocaleString()}`;
+      }
+
+      return copy;
+    });
+  };
 
   const handleCoverageStatusChange = (code: string, newStatus: CoverageStatus) => {
     setCoveragesState((prev) =>
@@ -291,6 +403,11 @@ export function PlanFormModal({
       setActiveTab('info');
       return;
     }
+    if (priceOptionsList.length === 0) {
+      setErrorMsg('กรุณาระบุตัวเลือกราคาและทุนประกันอย่างน้อย 1 รายการ');
+      setActiveTab('price');
+      return;
+    }
 
     setIsSubmitting(true);
     setErrorMsg('');
@@ -310,17 +427,20 @@ export function PlanFormModal({
         maxCarAge: Number(maxCarAge),
         usageType,
         inspectionRequired,
-        // Pricing
-        priceOptionLabel: priceOptionLabel || `${repairType === 'dealer' ? 'ซ่อมห้าง' : 'ซ่อมอู่'} - ทุน ${Number(sumInsured).toLocaleString()}`,
-        repairType,
-        priceType,
-        premiumTotal: hasPrice ? Number(premiumTotal) : null,
-        sumInsuredMin: Number(sumInsured),
-        sumInsuredMax: Number(sumInsured),
-        deductibleAmount: Number(deductibleAmount),
-        deductibleTerms: deductibleTerms || undefined,
-        compulsoryIncluded,
-        driverConditions,
+        // Multiple Price Options / Tiers!
+        priceOptions: priceOptionsList.map((po) => ({
+          id: po.id,
+          label: po.label || `${po.repairType === 'dealer' ? 'ซ่อมห้าง' : 'ซ่อมอู่'} - ทุน ${Number(po.sumInsuredMax).toLocaleString()}`,
+          repairType: po.repairType,
+          priceType: po.priceType,
+          premiumTotal: po.hasPrice && po.premiumTotal !== '' ? Number(po.premiumTotal) : null,
+          sumInsuredMin: Number(po.sumInsuredMax),
+          sumInsuredMax: Number(po.sumInsuredMax),
+          deductibleAmount: Number(po.deductibleAmount || 0),
+          deductibleTerms: po.deductibleTerms || undefined,
+          compulsoryIncluded: po.compulsoryIncluded,
+          driverConditions: po.driverConditions || 'ไม่จำกัดชื่อผู้ขับขี่',
+        })),
         // Coverages
         coverages: coveragesState.map((c) => ({
           code: c.code,
@@ -356,7 +476,7 @@ export function PlanFormModal({
               <span>{initialPlan ? 'แก้ไขแพ็กเกจประกันภัย' : 'เพิ่มแพ็กเกจประกันภัยใหม่'}</span>
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              บันทึกเงื่อนไขครบถ้วน: รถยนต์, ตัวเลือกราคา, ความคุ้มครองมาตรฐาน 14 หมวด, และเอกสารต้นทาง
+              รองรับตารางหลายทุนและหลายเบี้ยในแพ็กเกจเดียวกัน (Multiple Price Tiers), เงื่อนไขรถ, ความคุ้มครอง 14 หมวด, และเอกสารต้นทาง
             </p>
           </div>
           <button
@@ -372,7 +492,7 @@ export function PlanFormModal({
           {[
             { id: 'info', label: '1. ข้อมูลแพ็กเกจ' },
             { id: 'vehicle', label: '2. เงื่อนไขรถ' },
-            { id: 'price', label: '3. ราคาและทุนประกัน' },
+            { id: 'price', label: `3. ราคาและทุนประกัน (${priceOptionsList.length} ตัวเลือก)` },
             { id: 'coverages', label: `4. ความคุ้มครอง (${coveragesState.length} หมวด)` },
             { id: 'document', label: '5. เอกสารอ้างอิง' },
           ].map((tab) => (
@@ -445,7 +565,7 @@ export function PlanFormModal({
                 <input
                   type="text"
                   required
-                  placeholder="เช่น วิริยะ ซุปเปอร์โปรเทค พรีเมียม หรือ BKI Care 2+"
+                  placeholder="เช่น วิริยะ ซุปเปอร์โปรเทค พรีเมียม หรือ ธนชาต 2+ ฟิต อุ่นใจ"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500"
@@ -578,128 +698,190 @@ export function PlanFormModal({
             </div>
           )}
 
-          {/* TAB 3: Pricing */}
+          {/* TAB 3: Multiple Price Options / Tiers (แก้ปัญหา: แพ็กเกจชื่อเดียวกัน ต่างกันที่ทุนและเบี้ย) */}
           {activeTab === 'price' && (
             <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">ลักษณะการซ่อม *</label>
-                  <select
-                    value={repairType}
-                    onChange={(e) => setRepairType(e.target.value as RepairType)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl"
-                  >
-                    <option value="dealer">ซ่อมห้าง (ศูนย์บริการ)</option>
-                    <option value="garage">ซ่อมอู่ (อู่ในเครือ)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">ทุนประกันภัย (บาท) *</label>
-                  <input
-                    type="number"
-                    required
-                    step={10000}
-                    value={sumInsured}
-                    onChange={(e) => setSumInsured(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="font-semibold text-slate-700">เบี้ยประกันภัยรวม (บาท)</label>
-                    <label className="text-[11px] text-slate-500 flex items-center gap-1 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={!hasPrice}
-                        onChange={(e) => setHasPrice(!e.target.checked)}
-                        className="rounded"
-                      />
-                      <span>ยังไม่ระบุราคา</span>
-                    </label>
+              {/* Informative Guidance Banner */}
+              <div className="bg-blue-50/70 border border-blue-200 rounded-2xl p-4 flex items-start justify-between gap-3">
+                <div className="flex items-start gap-2.5">
+                  <Sparkles className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold text-blue-900 block">
+                      ตารางทุนและเบี้ยประกันภัย (Price Options / Tiers)
+                    </span>
+                    <p className="text-[11px] text-blue-800 mt-0.5">
+                      แพ็กเกจชื่อเดียวกันสามารถมีได้หลายตัวเลือกราคา โดยระบุทุนประกันและเบี้ยที่ต่างกันได้
+                      (เช่น ทุน 50,000 เบี้ย 5,400 / ทุน 100,000 เบี้ย 6,200 หรือ ซ่อมห้าง/ซ่อมอู่)
+                      ทุกตัวเลือกจะแชร์ชื่อแพ็กเกจและความคุ้มครองหลักร่วมกันโดยอัตโนมัติ
+                    </p>
                   </div>
-                  {hasPrice ? (
-                    <input
-                      type="number"
-                      step={100}
-                      value={premiumTotal}
-                      onChange={(e) => setPremiumTotal(e.target.value)}
-                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-blue-900"
-                    />
-                  ) : (
-                    <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-700 font-semibold">
-                      แสดง &quot;ยังไม่มีข้อมูลราคา&quot; (ไม่แทนด้วย 0 บาท)
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleAddPriceTier}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-xs transition shrink-0 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>เพิ่มตัวเลือกราคา / ทุน</span>
+                </button>
+              </div>
+
+              {/* Price Options Cards List */}
+              <div className="space-y-3">
+                {priceOptionsList.map((tier, idx) => (
+                  <div
+                    key={idx}
+                    className="bg-white border-2 border-slate-200 rounded-2xl p-4 shadow-2xs space-y-3 relative hover:border-slate-300 transition"
+                  >
+                    {/* Tier Card Header */}
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                      <div className="flex items-center gap-2">
+                        <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-800 font-bold flex items-center justify-center text-xs">
+                          {idx + 1}
+                        </span>
+                        <span className="font-bold text-slate-800 text-sm">
+                          {tier.label || `ตัวเลือกที่ ${idx + 1}`}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleDuplicateTier(idx)}
+                          className="px-2.5 py-1 text-[11px] font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center gap-1 transition cursor-pointer"
+                          title="คัดลอกตัวเลือกนี้แล้วเปลี่ยนทุน"
+                        >
+                          <Copy className="w-3 h-3 text-slate-500" />
+                          <span>คัดลอก</span>
+                        </button>
+
+                        {priceOptionsList.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveTier(idx)}
+                            className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
+                            title="ลบตัวเลือกราคานี้"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  )}
-                </div>
 
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">ชนิดของราคา</label>
-                  <select
-                    value={priceType}
-                    onChange={(e) => setPriceType(e.target.value as PriceType)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl"
-                  >
-                    <option value="fixed_for_conditions">ราคาตายตัวสำหรับเงื่อนไขนี้ (Fixed)</option>
-                    <option value="starting">ราคาเริ่มต้น (Starting)</option>
-                    <option value="indicative">ราคาประมาณการ (Indicative)</option>
-                  </select>
-                </div>
+                    {/* Inputs Grid for this Tier */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="font-semibold text-slate-700 block mb-1">
+                          ทุนประกันภัย (บาท) *
+                        </label>
+                        <input
+                          type="number"
+                          required
+                          step={10000}
+                          placeholder="เช่น 50000 หรือ 100000"
+                          value={tier.sumInsuredMax}
+                          onChange={(e) => handleUpdateTierField(idx, 'sumInsuredMax', e.target.value)}
+                          className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 text-sm"
+                        />
+                      </div>
+
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="font-semibold text-slate-700">เบี้ยประกันรวม (บาท)</label>
+                          <label className="text-[10px] text-slate-500 flex items-center gap-1 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={!tier.hasPrice}
+                              onChange={(e) => handleUpdateTierField(idx, 'hasPrice', !e.target.checked)}
+                              className="rounded"
+                            />
+                            <span>ยังไม่ระบุ</span>
+                          </label>
+                        </div>
+                        {tier.hasPrice ? (
+                          <input
+                            type="number"
+                            step={100}
+                            placeholder="เช่น 5400"
+                            value={tier.premiumTotal}
+                            onChange={(e) => handleUpdateTierField(idx, 'premiumTotal', e.target.value)}
+                            className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-blue-900 text-sm"
+                          />
+                        ) : (
+                          <div className="p-2 bg-amber-50 border border-amber-200 rounded-xl text-amber-700 font-semibold text-xs">
+                            ยังไม่มีข้อมูลราคา
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="font-semibold text-slate-700 block mb-1">ลักษณะการซ่อม *</label>
+                        <select
+                          value={tier.repairType}
+                          onChange={(e) => handleUpdateTierField(idx, 'repairType', e.target.value as RepairType)}
+                          className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs"
+                        >
+                          <option value="garage">ซ่อมอู่ (อู่ในเครือ)</option>
+                          <option value="dealer">ซ่อมห้าง (ศูนย์บริการ)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                      <div>
+                        <label className="font-semibold text-slate-700 block mb-1">
+                          ค่าเสียหายส่วนแรก Deductible (บาท)
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          step={1000}
+                          value={tier.deductibleAmount}
+                          onChange={(e) => handleUpdateTierField(idx, 'deductibleAmount', e.target.value)}
+                          placeholder="0 หากไม่มี"
+                          className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="font-semibold text-slate-700 block mb-1">การรวม พ.ร.บ.</label>
+                        <select
+                          value={tier.compulsoryIncluded}
+                          onChange={(e) => handleUpdateTierField(idx, 'compulsoryIncluded', e.target.value as any)}
+                          className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs"
+                        >
+                          <option value="excluded">ไม่รวม พ.ร.บ.</option>
+                          <option value="included">รวม พ.ร.บ. แล้ว</option>
+                          <option value="unspecified">ยังไม่ระบุ</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="font-semibold text-slate-700 block mb-1">เงื่อนไขผู้ขับขี่</label>
+                        <input
+                          type="text"
+                          placeholder="เช่น ไม่จำกัดชื่อ หรือ ระบุอายุ"
+                          value={tier.driverConditions}
+                          onChange={(e) => handleUpdateTierField(idx, 'driverConditions', e.target.value)}
+                          className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">ค่าเสียหายส่วนแรก Deductible (บาท)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    step={1000}
-                    value={deductibleAmount}
-                    onChange={(e) => setDeductibleAmount(e.target.value)}
-                    placeholder="0 หากไม่มี"
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">เงื่อนไขค่าเสียหายส่วนแรก</label>
-                  <input
-                    type="text"
-                    placeholder="เช่น กรณีเกิดเหตุเป็นฝ่ายผิดหรือไม่ทราบคู่กรณี"
-                    value={deductibleTerms}
-                    onChange={(e) => setDeductibleTerms(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">การรวม พ.ร.บ.</label>
-                  <select
-                    value={compulsoryIncluded}
-                    onChange={(e) => setCompulsoryIncluded(e.target.value as any)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl"
-                  >
-                    <option value="excluded">ไม่รวม พ.ร.บ.</option>
-                    <option value="included">รวม พ.ร.บ. แล้ว</option>
-                    <option value="unspecified">ยังไม่ระบุ</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">เงื่อนไขผู้ขับขี่</label>
-                  <input
-                    type="text"
-                    placeholder="เช่น ไม่จำกัดชื่อผู้ขับขี่ หรือ ระบุผู้ขับขี่อายุ 30 ปีขึ้นไป"
-                    value={driverConditions}
-                    onChange={(e) => setDriverConditions(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl"
-                  />
-                </div>
+              {/* Bottom Add Tier Button */}
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={handleAddPriceTier}
+                  className="w-full py-3 border-2 border-dashed border-slate-300 hover:border-blue-500 hover:bg-blue-50/50 rounded-2xl font-bold text-slate-600 hover:text-blue-700 transition flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>เพิ่มตัวเลือกราคา / ทุนประกันอีกรายการ (เช่น ทุน 100,000 / 200,000 / 300,000)</span>
+                </button>
               </div>
             </div>
           )}
