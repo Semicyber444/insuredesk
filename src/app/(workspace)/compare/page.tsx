@@ -49,6 +49,14 @@ function CompareContent() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    const prevTitle = document.title;
+    document.title = 'ใบเสนอราคาประกันภัยรถยนต์ - InsureDesk';
+    return () => {
+      document.title = prevTitle;
+    };
+  }, []);
+
+  useEffect(() => {
     let ids: string[] = [];
     if (idsParam) {
       ids = idsParam.split(',').filter(Boolean);
@@ -224,7 +232,7 @@ function CompareContent() {
         @media print {
           @page {
             size: A4 portrait;
-            margin: 4mm 6mm !important;
+            margin: 0 !important; /* Removes browser default URL, title, date, page number */
           }
           html, body {
             width: 210mm !important;
@@ -245,11 +253,12 @@ function CompareContent() {
             width: 100% !important;
             max-width: 100% !important;
             margin: 0 !important;
-            padding: 0 !important;
+            padding: 6mm 8mm !important; /* Replaces page margin cleanly inside paper */
             border: none !important;
             box-shadow: none !important;
             page-break-after: avoid !important;
             page-break-inside: avoid !important;
+            box-sizing: border-box !important;
           }
           table {
             page-break-inside: avoid !important;
