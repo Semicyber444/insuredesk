@@ -69,6 +69,18 @@ export function buildSearchResultItems(): InsuranceSearchResultItem[] {
   const vehicleModels = InsuranceStore.getVehicleModels();
   const allDocuments = InsuranceStore.getDocuments();
 
+  // Find the latest active published version for each plan (Section 12.3)
+  const latestPublishedVersionByPlan = new Map<string, string>();
+  for (const plan of plans) {
+    if (plan.is_archived) continue;
+    const planPublishedVersions = versions
+      .filter((v) => v.plan_id === plan.id && v.workflow_status === 'published')
+      .sort((a, b) => b.version_no - a.version_no);
+    if (planPublishedVersions.length > 0) {
+      latestPublishedVersionByPlan.set(plan.id, planPublishedVersions[0].id);
+    }
+  }
+
   for (const option of priceOptions) {
     const rule = rules.find((r) => r.id === option.eligibility_rule_id);
     if (!rule) continue;
@@ -78,6 +90,10 @@ export function buildSearchResultItems(): InsuranceSearchResultItem[] {
 
     const plan = plans.find((p) => p.id === version.plan_id);
     if (!plan || plan.is_archived) continue;
+
+    // Strict versioning rule: Only show price options belonging to the latest published version of this plan
+    const activeVersionId = latestPublishedVersionByPlan.get(plan.id);
+    if (!activeVersionId || version.id !== activeVersionId) continue;
 
     const insurer = insurers.find((i) => i.id === plan.insurer_id);
     if (!insurer || !insurer.is_active) continue;

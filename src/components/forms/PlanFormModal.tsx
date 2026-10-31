@@ -60,6 +60,9 @@ export function PlanFormModal({
   const [vehicles, setVehicles] = useState<VehicleModel[]>([]);
 
   // 1. Basic Plan info
+  const [currentVersionId, setCurrentVersionId] = useState<string | null>(null);
+  const [currentVersionNo, setCurrentVersionNo] = useState<number>(1);
+  const [saveMode, setSaveMode] = useState<'update' | 'new_version'>('update');
   const [insurerId, setInsurerId] = useState('');
   const [name, setName] = useState('');
   const [insuranceType, setInsuranceType] = useState<InsuranceType>('ชั้น 1');
@@ -214,10 +217,17 @@ export function PlanFormModal({
         setInsuranceType(initialPlan.insurance_type || 'ชั้น 1');
         setWorkflowStatus(initialPlan.currentStatus || 'published');
 
-        // Load existing version data
-        const versions = InsuranceStore.getVersions().filter((v) => v.plan_id === initialPlan.id);
+        // Load existing version data (latest version first)
+        const versions = InsuranceStore.getVersions()
+          .filter((v) => v.plan_id === initialPlan.id)
+          .sort((a, b) => b.version_no - a.version_no);
         const latestVer = versions[0];
         if (latestVer) {
+          setCurrentVersionId(latestVer.id);
+          setCurrentVersionNo(latestVer.version_no);
+          setSaveMode('update');
+          setNotes(latestVer.notes || '');
+
           const rules = InsuranceStore.getEligibilityRules().filter((r) => r.plan_version_id === latestVer.id);
           const rule = rules[0];
           if (rule) {
@@ -277,6 +287,9 @@ export function PlanFormModal({
           }
         }
       } else {
+        setCurrentVersionId(null);
+        setCurrentVersionNo(1);
+        setSaveMode('new_version');
         setInsurerId(insList[0]?.id || '');
         setName('');
         setInsuranceType('ชั้น 1');
@@ -412,14 +425,19 @@ export function PlanFormModal({
     setIsSubmitting(true);
     setErrorMsg('');
 
+    const targetVersionId = initialPlan && saveMode === 'update' && currentVersionId ? currentVersionId : undefined;
+
     try {
       InsuranceStore.createOrUpdatePlan({
         planId: initialPlan?.id,
+        versionId: targetVersionId,
         insurerId,
         name,
         insuranceType,
         workflowStatus,
-        notes,
+        notes: saveMode === 'new_version' && initialPlan
+          ? `สร้างรุ่นที่ ${currentVersionNo + 1}: ${notes || 'ปรับปรุงเงื่อนไขใหม่'}`
+          : notes,
         // Eligibility
         scopeType,
         vehicleModelId: scopeType === 'specific_model' ? vehicleModelId : null,
@@ -523,6 +541,44 @@ export function PlanFormModal({
           {/* TAB 1: General Info */}
           {activeTab === 'info' && (
             <div className="space-y-4">
+              {initialPlan && (
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-3.5 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-blue-950 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-blue-600 inline-block animate-pulse"></span>
+                      เวอร์ชันปัจจุบันที่กำลังแก้ไข: รุ่นที่ {currentVersionNo}
+                    </span>
+                    <span className="text-[11px] text-blue-700 bg-blue-100/70 px-2 py-0.5 rounded-md font-mono">
+                      ID: {currentVersionId?.slice(0, 12)}...
+                    </span>
+                  </div>
+                  <div className="text-xs text-slate-700 font-semibold pt-2 border-t border-blue-100 flex flex-wrap gap-4">
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="saveMode"
+                        value="update"
+                        checked={saveMode === 'update'}
+                        onChange={() => setSaveMode('update')}
+                        className="text-blue-600 focus:ring-blue-500"
+                      />
+                      <span>อัปเดตข้อมูลในรุ่นที่ {currentVersionNo} โดยตรง (แก้ไขข้อมูลเดิม)</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="saveMode"
+                        value="new_version"
+                        checked={saveMode === 'new_version'}
+                        onChange={() => setSaveMode('new_version')}
+                        className="text-blue-600 focus:ring-blue-500"
+                      />
+                      <span>สร้างเป็นรุ่นใหม่ (รุ่นที่ {currentVersionNo + 1}) — เก็บประวัติรุ่นเดิม</span>
+                    </label>
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="font-semibold text-slate-700 block mb-1">บริษัทประกันภัย *</label>

@@ -111,7 +111,37 @@ export class InsuranceStore {
   }
 
   static getVersions(): PlanVersion[] {
-    return loadFromStorage(STORAGE_KEYS.VERSIONS, MOCK_PLAN_VERSIONS);
+    const versions = loadFromStorage(STORAGE_KEYS.VERSIONS, MOCK_PLAN_VERSIONS);
+
+    // Auto-heal / migration: Ensure each plan has at most ONE 'published' version
+    // If a plan has multiple published versions, retain only the one with the highest version_no
+    let modified = false;
+    const planVersionsMap = new Map<string, PlanVersion[]>();
+    for (const v of versions) {
+      const list = planVersionsMap.get(v.plan_id) || [];
+      list.push(v);
+      planVersionsMap.set(v.plan_id, list);
+    }
+
+    for (const [, vList] of planVersionsMap.entries()) {
+      const publishedList = vList.filter((v) => v.workflow_status === 'published');
+      if (publishedList.length > 1) {
+        // Sort descending by version_no
+        publishedList.sort((a, b) => b.version_no - a.version_no);
+        // publishedList[0] stays published; others become archived
+        for (let i = 1; i < publishedList.length; i++) {
+          publishedList[i].workflow_status = 'archived';
+          publishedList[i].updated_at = new Date().toISOString();
+          modified = true;
+        }
+      }
+    }
+
+    if (modified) {
+      saveToStorage(STORAGE_KEYS.VERSIONS, versions);
+    }
+
+    return versions;
   }
 
   static getEligibilityRules(): EligibilityRule[] {
@@ -255,23 +285,27 @@ export class InsuranceStore {
     // 2. Update or Create Version
     let version: PlanVersion;
     const vIdx = versions.findIndex((v) => v.id === versionId);
+    const targetStatus = payload.workflowStatus || 'published';
+
     if (vIdx !== -1) {
       versions[vIdx] = {
         ...versions[vIdx],
-        workflow_status: payload.workflowStatus || versions[vIdx].workflow_status,
+        workflow_status: targetStatus,
         notes: payload.notes || versions[vIdx].notes,
         updated_at: new Date().toISOString(),
       };
       version = versions[vIdx];
     } else {
+      const existingPlanVersions = versions.filter((v) => v.plan_id === planId);
+      const maxVerNo = existingPlanVersions.reduce((max, v) => Math.max(max, v.version_no), 0);
       version = {
         id: versionId,
         plan_id: planId,
-        version_no: versions.filter((v) => v.plan_id === planId).length + 1,
-        workflow_status: payload.workflowStatus || 'published',
+        version_no: maxVerNo + 1,
+        workflow_status: targetStatus,
         effective_from: '2026-01-01',
         effective_to: '2026-12-31',
-        verified_at: payload.workflowStatus === 'published' ? new Date().toISOString() : null,
+        verified_at: targetStatus === 'published' ? new Date().toISOString() : null,
         review_due_at: '2026-12-31',
         notes: payload.notes || 'บันทึกข้อมูลแพ็กเกจใหม่',
         created_at: new Date().toISOString(),
@@ -279,6 +313,17 @@ export class InsuranceStore {
       };
       versions.unshift(version);
     }
+
+    // Versioning rule: If this version is published, archive any other published versions of this plan
+    if (targetStatus === 'published') {
+      for (const v of versions) {
+        if (v.plan_id === planId && v.id !== version.id && v.workflow_status === 'published') {
+          v.workflow_status = 'archived';
+          v.updated_at = new Date().toISOString();
+        }
+      }
+    }
+
     saveToStorage(STORAGE_KEYS.VERSIONS, versions);
 
     // 3. Eligibility Rule

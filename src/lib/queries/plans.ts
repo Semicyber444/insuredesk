@@ -8,15 +8,18 @@ export async function getAllPlans() {
 
   return plans.map((plan) => {
     const insurer = insurers.find((i) => i.id === plan.insurer_id);
-    const planVersions = versions.filter((v) => v.plan_id === plan.id);
-    const activeVersion = planVersions.find((v) => v.workflow_status === 'published') ?? planVersions[0];
+    const planVersions = versions
+      .filter((v) => v.plan_id === plan.id)
+      .sort((a, b) => b.version_no - a.version_no);
+    const publishedVersions = planVersions.filter((v) => v.workflow_status === 'published');
+    const activeVersion = publishedVersions[0] ?? planVersions[0];
 
     return {
       ...plan,
       insurerName: insurer?.name ?? 'ไม่ระบุ',
       versionsCount: planVersions.length,
       currentStatus: activeVersion?.workflow_status ?? 'draft',
-      latestVersionNo: Math.max(...planVersions.map((v) => v.version_no), 1),
+      latestVersionNo: activeVersion?.version_no ?? (planVersions[0]?.version_no ?? 1),
     };
   });
 }
@@ -28,7 +31,9 @@ export async function getPlanById(planId: string) {
 
   const insurers = InsuranceStore.getInsurers();
   const insurer = insurers.find((i) => i.id === plan.insurer_id);
-  const versions = InsuranceStore.getVersions().filter((v) => v.plan_id === plan.id);
+  const versions = InsuranceStore.getVersions()
+    .filter((v) => v.plan_id === plan.id)
+    .sort((a, b) => b.version_no - a.version_no);
 
   return {
     ...plan,

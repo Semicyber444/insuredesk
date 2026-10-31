@@ -140,3 +140,25 @@ describe('3. Zod Schemas & Data Constraints Validation (Section 8.4)', () => {
     expect(result.success).toBe(false);
   });
 });
+
+describe('4. Versioning & Search Deduplication Rules (Section 12.3)', () => {
+  it('should only show options from the latest published version of any plan in search results', async () => {
+    const res = await searchInsuranceOptions();
+    // Group all returned options by planId
+    const planVersionMap = new Map<string, Set<number>>();
+    for (const item of res.items) {
+      if (!planVersionMap.has(item.planId)) {
+        planVersionMap.set(item.planId, new Set());
+      }
+      planVersionMap.get(item.planId)!.add(item.versionNo);
+    }
+
+    // Every plan must have exactly 1 active versionNo appearing in search results
+    for (const [planId, versionNos] of planVersionMap.entries()) {
+      expect(
+        versionNos.size,
+        `Plan ${planId} has options from multiple version numbers: ${Array.from(versionNos).join(', ')}`
+      ).toBe(1);
+    }
+  });
+});
