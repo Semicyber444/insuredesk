@@ -24,7 +24,7 @@ export default async function WorkspaceLayout({
       <main className="flex-1">{children}</main>
 
       {/* Footer Disclaimer (Section 21) */}
-      <footer className="bg-white border-t border-slate-200 mt-12 py-6">
+      <footer className="bg-white border-t border-slate-200 mt-12 py-6 print:hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-start gap-3 text-xs text-slate-600">
             <AlertCircle className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
