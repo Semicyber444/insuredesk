@@ -1,4 +1,5 @@
 import { ComparisonWarning, InsuranceSearchResultItem } from '@/types/insurance';
+import { getBangkokDateString } from '@/lib/store/insuranceStore';
 import { buildSearchResultItems } from './search';
 
 export interface ComparisonResult {
@@ -20,15 +21,39 @@ export function generateComparisonWarnings(options: InsuranceSearchResultItem[])
 
   if (options.length < 2) return warnings;
 
-  // 1. Sum Insured Differences
-  const sumInsuredValues = options.map((o) => o.sumInsuredMax ?? o.sumInsuredMin ?? 0);
-  const minSum = Math.min(...sumInsuredValues);
-  const maxSum = Math.max(...sumInsuredValues);
-  if (minSum !== maxSum) {
+  const today = getBangkokDateString(0);
+
+  // 1. Sum Insured Differences (Never map null/unknown sum insured to 0!)
+  const knownSums = options
+    .map((o) => o.sumInsuredMax ?? o.sumInsuredMin)
+    .filter((v): v is number => v !== null && v !== undefined);
+  const hasNullSum = knownSums.length < options.length;
+
+  if (knownSums.length >= 2) {
+    const minSum = Math.min(...knownSums);
+    const maxSum = Math.max(...knownSums);
+    if (minSum !== maxSum) {
+      warnings.push({
+        type: 'sum_insured_diff',
+        title: 'ทุนประกันภัยไม่เท่ากัน',
+        message: `ตัวเลือกที่เปรียบเทียบมีทุนประกันต่างกัน (ต่ำสุด ฿${minSum.toLocaleString()} ถึง สูงสุด ฿${maxSum.toLocaleString()})${
+          hasNullSum ? ' และมีบางรายการที่ยังไม่ระบุทุนประกัน' : ''
+        } กรุณาคำนึงถึงมูลค่ารถยนต์ขณะเปรียบเทียบเบี้ย`,
+        severity: 'warning',
+      });
+    } else if (hasNullSum) {
+      warnings.push({
+        type: 'sum_insured_diff',
+        title: 'บางรายการยังไม่ระบุทุนประกันภัย',
+        message: 'มีทั้งตัวเลือกที่ระบุทุนประกันชัดเจนและตัวเลือกที่ยังไม่ระบุทุนประกัน กรุณาตรวจสอบตารางกรมธรรม์ก่อนตัดสินใจ',
+        severity: 'warning',
+      });
+    }
+  } else if (hasNullSum && knownSums.length === 1) {
     warnings.push({
       type: 'sum_insured_diff',
-      title: 'ทุนประกันภัยไม่เท่ากัน',
-      message: `ตัวเลือกที่เปรียบเทียบมีทุนประกันต่างกัน (ต่ำสุด ฿${minSum.toLocaleString()} ถึง สูงสุด ฿${maxSum.toLocaleString()}) กรุณาคำนึงถึงมูลค่ารถยนต์ขณะเปรียบเทียบเบี้ย`,
+      title: 'บางรายการยังไม่ระบุทุนประกันภัย',
+      message: 'มีทั้งตัวเลือกที่ระบุทุนประกันชัดเจนและตัวเลือกที่ยังไม่ระบุทุนประกัน กรุณาตรวจสอบตารางกรมธรรม์ก่อนตัดสินใจ',
       severity: 'warning',
     });
   }
@@ -66,24 +91,52 @@ export function generateComparisonWarnings(options: InsuranceSearchResultItem[])
     });
   }
 
-  // 5. Driver / Vehicle Conditions
-  const hasSpecificDriver = options.some((o) => o.driverConditions && o.driverConditions.includes('ระบุผู้ขับขี่'));
-  if (hasSpecificDriver) {
+  // 5. Driver / Vehicle Eligibility Differences
+  const driverSet = new Set(options.map((o) => (o.driverConditions || 'ไม่จำกัดชื่อผู้ขับขี่').trim()));
+  const scopeSet = new Set(
+    options.map((o) => `${o.scopeType}:${o.vehicleModelId ?? ''}:${o.minCarAge ?? ''}-${o.maxCarAge ?? ''}:${o.usageType ?? ''}`)
+  );
+  const hasSpecificDriver = options.some(
+    (o) => o.driverConditions && o.driverConditions.includes('ระบุผู้ขับขี่')
+  );
+  if (hasSpecificDriver || driverSet.size > 1 || scopeSet.size > 1) {
     warnings.push({
       type: 'driver_diff',
-      title: 'มีเงื่อนไขระบุผู้ขับขี่เฉพาะเจาะจง',
-      message: 'บางแพ็กเกจกำหนดอายุหรือชื่อผู้ขับขี่ หากผู้อื่นนำรถไปเกิดเหตุอาจมีเงื่อนไขค่าเสียหายส่วนแรกเพิ่ม',
+      title: hasSpecificDriver
+        ? 'มีเงื่อนไขระบุผู้ขับขี่เฉพาะเจาะจง'
+        : 'เงื่อนไขผู้ขับขี่หรือคุณสมบัติรถที่รับประกันต่างกัน',
+      message: hasSpecificDriver
+        ? 'บางแพ็กเกจกำหนดอายุหรือชื่อผู้ขับขี่ หากผู้อื่นนำรถไปเกิดเหตุอาจมีเงื่อนไขค่าเสียหายส่วนแรกเพิ่ม'
+        : 'ตัวเลือกที่นำมาเทียบมีเงื่อนไขอายุรถ รุ่นรถ หรือเงื่อนไขผู้ขับขี่แตกต่างกัน กรุณาตรวจสอบว่ารถลูกค้าเข้าเกณฑ์ทุกตัวเลือก',
       severity: 'warning',
     });
   }
 
-  // 6. Unknown / Missing Data Check
+  // 6. Expired Price / Version Effective Date Check (Section 11)
+  const hasExpired = options.some(
+    (o) =>
+      (o.priceValidTo && o.priceValidTo < today) ||
+      (o.versionEffectiveTo && o.versionEffectiveTo < today)
+  );
+  if (hasExpired) {
+    warnings.push({
+      type: 'expired_price',
+      title: 'พบตัวเลือกราคาที่หมดอายุการบังคับใช้',
+      message: 'มีตัวเลือกที่พ้นกำหนดวันสิ้นสุดอัตราเบี้ยแล้ว กรุณาตรวจสอบอัตราเบี้ยรุ่นล่าสุดกับบริษัทประกันภัยก่อนเสนอราคาจริง',
+      severity: 'warning',
+    });
+  }
+
+  // 7. Unknown / Missing Data Check (Section 9.3, 9.4, 9.5)
   const hasUnknownPrices = options.some((o) => o.premiumTotal === null || o.premiumTotal === undefined);
-  if (hasUnknownPrices) {
+  const hasUnknownCoverages = options.some((o) => o.coverages.some((c) => c.status === 'unknown'));
+  if (hasUnknownPrices || hasNullSum || hasUnknownCoverages) {
     warnings.push({
       type: 'unknown_data',
-      title: 'มีข้อมูลสำคัญที่ยังไม่ทราบ',
-      message: 'บางรายการไม่มีข้อมูลราคาที่แน่นอนในเอกสารต้นทาง ระบบแสดง "ยังไม่มีข้อมูลราคา" และไม่สามารถตัดสินความคุ้มค่าได้ทันที',
+      title: 'มีข้อมูลสำคัญที่ยังไม่ทราบครบถ้วน',
+      message: hasUnknownPrices
+        ? 'บางรายการไม่มีข้อมูลราคาที่แน่นอนในเอกสารต้นทาง ระบบแสดง "ยังไม่มีข้อมูลราคา" และไม่สามารถตัดสินความคุ้มค่าได้ทันที'
+        : 'บางรายการยังไม่ระบุทุนประกันหรือมีหมวดความคุ้มครองที่ "ยังไม่ระบุ" ในเอกสารต้นทาง กรุณาตรวจสอบเอกสารแนบเพิ่มเติม',
       severity: 'caution',
     });
   }
@@ -121,7 +174,7 @@ export async function getComparisonData(optionIds: string[]): Promise<Comparison
 
       for (const opt of selectedOptions) {
         const cov = opt.coverages.find((c) => c.code === code);
-        let text = '-';
+        let text = 'ยังไม่ระบุ';
         let status = 'unknown';
         let isOverridden = false;
 
@@ -132,11 +185,12 @@ export async function getComparisonData(optionIds: string[]): Promise<Comparison
             text = 'ไม่คุ้มครอง';
           } else if (cov.status === 'covered') {
             if (cov.limitAmount) {
-              text = `฿${cov.limitAmount.toLocaleString()} ${cov.limitBasis ? '(' + cov.limitBasis + ')' : ''}`;
+              text = `฿${cov.limitAmount.toLocaleString()}${cov.limitBasis ? ' (' + cov.limitBasis + ')' : ''}`;
             } else if (cov.limitBasis) {
               text = cov.limitBasis;
             } else {
-              text = 'คุ้มครอง (ตามเงื่อนไข)';
+              // Section 9.4: Never guess unlimited or sum insured when limit is omitted
+              text = 'คุ้มครอง (ยังไม่ระบุวงเงิน)';
             }
           } else if (cov.status === 'optional') {
             text = 'ซื้อเพิ่มได้';

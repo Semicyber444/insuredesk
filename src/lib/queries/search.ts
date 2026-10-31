@@ -3,7 +3,7 @@ import {
   InsuranceSearchResultItem,
   SearchFilters
 } from '@/types/insurance';
-import { InsuranceStore } from '@/lib/store/insuranceStore';
+import { InsuranceStore, getBangkokDateString } from '@/lib/store/insuranceStore';
 
 // Helper to resolve coverages for a given price_option and plan_version
 export function resolveCoverages(
@@ -133,6 +133,8 @@ export function buildSearchResultItems(): InsuranceSearchResultItem[] {
       planVersionId: version.id,
       versionNo: version.version_no,
       workflowStatus: version.workflow_status,
+      versionEffectiveFrom: version.effective_from,
+      versionEffectiveTo: version.effective_to,
       verifiedAt: version.verified_at,
       reviewDueAt: version.review_due_at,
 
@@ -144,6 +146,7 @@ export function buildSearchResultItems(): InsuranceSearchResultItem[] {
       vehicleVariant: vehicle?.variant,
       minCarAge: rule.min_age,
       maxCarAge: rule.max_age,
+      ageBasis: rule.age_basis,
       usageType: rule.usage_type,
       inspectionRequired: rule.inspection_required,
 
@@ -157,15 +160,20 @@ export function buildSearchResultItems(): InsuranceSearchResultItem[] {
 
 export async function searchInsuranceOptions(filters: SearchFilters = {}) {
   const allItems = buildSearchResultItems();
+  const today = getBangkokDateString(0);
 
   const filtered = allItems.filter((item) => {
-    // 1. Text Search (Insurer name, Plan name, Option label)
+    // 1. Text Search (Insurer name, Plan name, Option label, Vehicle)
     if (filters.query && filters.query.trim() !== '') {
       const q = filters.query.toLowerCase().trim();
       const matchInsurer = item.insurerName.toLowerCase().includes(q);
       const matchPlan = item.planName.toLowerCase().includes(q);
       const matchLabel = item.priceOptionLabel.toLowerCase().includes(q);
-      const matchVehicle = (item.vehicleBrand + ' ' + item.vehicleModel).toLowerCase().includes(q);
+      const vehicleText = [item.vehicleBrand, item.vehicleModel, item.vehicleVariant]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      const matchVehicle = vehicleText.includes(q);
       if (!matchInsurer && !matchPlan && !matchLabel && !matchVehicle) {
         return false;
       }
@@ -192,8 +200,20 @@ export async function searchInsuranceOptions(filters: SearchFilters = {}) {
       }
     }
 
-    // 5. Vehicle Scope & Car Age
+    // 5. Vehicle Scope & Car Age (Section 10.2: scope_type = 'unknown' must NOT match as all_models)
+    if (filters.vehicleBrand) {
+      if (item.scopeType === 'unknown') {
+        return false;
+      }
+      if (item.scopeType === 'specific_model' && item.vehicleBrand !== filters.vehicleBrand) {
+        return false;
+      }
+    }
+
     if (filters.vehicleModelId) {
+      if (item.scopeType === 'unknown') {
+        return false;
+      }
       if (item.scopeType === 'specific_model' && item.vehicleModelId !== filters.vehicleModelId) {
         return false;
       }
@@ -230,14 +250,16 @@ export async function searchInsuranceOptions(filters: SearchFilters = {}) {
       }
     }
 
-    // 8. Sum Insured Range
-    if (filters.minSumInsured !== undefined) {
-      const sumMax = item.sumInsuredMax ?? item.sumInsuredMin ?? 0;
-      if (sumMax < filters.minSumInsured) return false;
-    }
-    if (filters.maxSumInsured !== undefined) {
-      const sumMin = item.sumInsuredMin ?? 0;
-      if (sumMin > filters.maxSumInsured) return false;
+    // 8. Sum Insured Range (Never treat null/unknown sum insured as 0)
+    if (filters.minSumInsured !== undefined || filters.maxSumInsured !== undefined) {
+      const hasKnownSum = item.sumInsuredMax != null || item.sumInsuredMin != null;
+      if (!hasKnownSum) {
+        return false;
+      }
+      const sumMax = item.sumInsuredMax ?? item.sumInsuredMin!;
+      const sumMin = item.sumInsuredMin ?? item.sumInsuredMax!;
+      if (filters.minSumInsured !== undefined && sumMax < filters.minSumInsured) return false;
+      if (filters.maxSumInsured !== undefined && sumMin > filters.maxSumInsured) return false;
     }
 
     // 9. Required Coverages (Section 10.2: ALL must be 'covered', NOT optional)
@@ -250,13 +272,11 @@ export async function searchInsuranceOptions(filters: SearchFilters = {}) {
       }
     }
 
-    // 10. Check if expired
-    if (item.priceValidTo) {
-      const today = new Date().toISOString().slice(0, 10);
-      if (item.priceValidTo < today) {
-        return false;
-      }
-    }
+    // 10. Active date window check (Asia/Bangkok YYYY-MM-DD, Section 8.1 & 10.2)
+    if (item.priceValidTo && item.priceValidTo < today) return false;
+    if (item.versionEffectiveTo && item.versionEffectiveTo < today) return false;
+    if (item.priceValidFrom && item.priceValidFrom > today) return false;
+    if (item.versionEffectiveFrom && item.versionEffectiveFrom > today) return false;
 
     return true;
   });

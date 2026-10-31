@@ -2,8 +2,7 @@
 
 import { SearchFilters } from '@/types/insurance';
 import { Insurer, VehicleModel, CoverageType, InsuranceType, RepairType } from '@/types/database';
-import { Filter, RotateCcw, Search, ChevronDown, ChevronUp } from 'lucide-react';
-import { useState } from 'react';
+import { Filter, RotateCcw, Search } from 'lucide-react';
 
 interface FilterSidebarProps {
   filters: SearchFilters;
@@ -28,12 +27,11 @@ export function FilterSidebar({
   coverageTypes,
   totalResults,
 }: FilterSidebarProps) {
-  const [showAllCoverages, setShowAllCoverages] = useState(false);
-
   const handleReset = () => {
     onFilterChange({
       page: 1,
       pageSize: 20,
+      sortBy: filters.sortBy ?? 'premium_asc',
     });
   };
 
@@ -61,8 +59,12 @@ export function FilterSidebar({
     onFilterChange({ ...filters, requiredCoverageCodes: next, page: 1 });
   };
 
-  // Group coverages by category
+  // Group coverages by category & derive vehicle brands
   const categories = Array.from(new Set(coverageTypes.map((c) => c.category)));
+  const brands = Array.from(new Set(vehicleModels.map((vm) => vm.brand)));
+  const visibleModels = filters.vehicleBrand
+    ? vehicleModels.filter((vm) => vm.brand === filters.vehicleBrand)
+    : vehicleModels;
 
   return (
     <aside className="w-full lg:w-80 bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-6">
@@ -171,8 +173,36 @@ export function FilterSidebar({
         </div>
       </div>
 
-      {/* 5. Car Model & Age */}
+      {/* 5. Car Brand, Model, Age & Usage Type */}
       <div className="space-y-3 pt-2 border-t border-slate-100">
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold text-slate-700">ยี่ห้อรถยนต์</label>
+          <select
+            value={filters.vehicleBrand ?? ''}
+            onChange={(e) => {
+              const nextBrand = e.target.value || undefined;
+              const currentModel = vehicleModels.find((vm) => vm.id === filters.vehicleModelId);
+              onFilterChange({
+                ...filters,
+                vehicleBrand: nextBrand,
+                vehicleModelId:
+                  nextBrand && currentModel && currentModel.brand !== nextBrand
+                    ? undefined
+                    : filters.vehicleModelId,
+                page: 1,
+              });
+            }}
+            className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">ทุกยี่ห้อ / ไม่ระบุ</option>
+            {brands.map((brand) => (
+              <option key={brand} value={brand}>
+                {brand}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <div className="space-y-1.5">
           <label className="text-xs font-semibold text-slate-700">รุ่นรถยนต์</label>
           <select
@@ -187,7 +217,7 @@ export function FilterSidebar({
             className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">ทุกรุ่น / ไม่ระบุ</option>
-            {vehicleModels.map((vm) => (
+            {visibleModels.map((vm) => (
               <option key={vm.id} value={vm.id}>
                 {vm.brand} {vm.model} ({vm.variant || vm.powertrain || 'ทั่วไป'})
               </option>
@@ -195,71 +225,132 @@ export function FilterSidebar({
           </select>
         </div>
 
-        <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-slate-700">อายุรถยนต์ (ปี)</label>
-          <input
-            type="number"
-            min={0}
-            max={30}
-            placeholder="เช่น 3 ปี"
-            value={filters.carAge ?? ''}
-            onChange={(e) =>
-              onFilterChange({
-                ...filters,
-                carAge: e.target.value ? parseInt(e.target.value, 10) : undefined,
-                page: 1,
-              })
-            }
-            className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-      </div>
-
-      {/* 6. Premium Range */}
-      <div className="space-y-2 pt-2 border-t border-slate-100">
-        <label className="text-xs font-semibold text-slate-700">ช่วงเบี้ยรวม (บาท)</label>
         <div className="grid grid-cols-2 gap-2">
-          <input
-            type="number"
-            placeholder="ต่ำสุด"
-            value={filters.minPremium ?? ''}
-            onChange={(e) =>
-              onFilterChange({
-                ...filters,
-                minPremium: e.target.value ? parseFloat(e.target.value) : undefined,
-                page: 1,
-              })
-            }
-            className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <input
-            type="number"
-            placeholder="สูงสุด"
-            value={filters.maxPremium ?? ''}
-            onChange={(e) =>
-              onFilterChange({
-                ...filters,
-                maxPremium: e.target.value ? parseFloat(e.target.value) : undefined,
-                page: 1,
-              })
-            }
-            className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-slate-700">อายุรถ (ปี)</label>
+            <input
+              type="number"
+              min={0}
+              max={35}
+              placeholder="เช่น 3 ปี"
+              value={filters.carAge ?? ''}
+              onChange={(e) =>
+                onFilterChange({
+                  ...filters,
+                  carAge: e.target.value !== '' ? parseInt(e.target.value, 10) : undefined,
+                  page: 1,
+                })
+              }
+              className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-slate-700">การใช้งาน</label>
+            <select
+              value={filters.usageType ?? ''}
+              onChange={(e) =>
+                onFilterChange({
+                  ...filters,
+                  usageType: e.target.value || undefined,
+                  page: 1,
+                })
+              }
+              className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">ทั้งหมด</option>
+              <option value="private">ส่วนบุคคล</option>
+              <option value="commercial">เชิงพาณิชย์</option>
+            </select>
+          </div>
         </div>
-        <label className="flex items-center gap-2 text-[11px] text-slate-500 cursor-pointer pt-1">
-          <input
-            type="checkbox"
-            checked={filters.includeUnknownPrice ?? false}
-            onChange={(e) =>
-              onFilterChange({ ...filters, includeUnknownPrice: e.target.checked, page: 1 })
-            }
-            className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-          />
-          <span>รวมแผนที่ยังไม่ระบุราคา</span>
-        </label>
       </div>
 
-      {/* 7. All Required Coverages (Section 10.2: ALL 14 categories) */}
+      {/* 6. Premium & Sum Insured Ranges */}
+      <div className="space-y-3 pt-2 border-t border-slate-100">
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold text-slate-700">ช่วงเบี้ยรวม (บาท)</label>
+          <div className="grid grid-cols-2 gap-2">
+            <input
+              type="number"
+              min={0}
+              placeholder="ต่ำสุด"
+              value={filters.minPremium ?? ''}
+              onChange={(e) =>
+                onFilterChange({
+                  ...filters,
+                  minPremium: e.target.value !== '' ? parseFloat(e.target.value) : undefined,
+                  page: 1,
+                })
+              }
+              className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <input
+              type="number"
+              min={0}
+              placeholder="สูงสุด"
+              value={filters.maxPremium ?? ''}
+              onChange={(e) =>
+                onFilterChange({
+                  ...filters,
+                  maxPremium: e.target.value !== '' ? parseFloat(e.target.value) : undefined,
+                  page: 1,
+                })
+              }
+              className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <label className="flex items-center gap-2 text-[11px] text-slate-500 cursor-pointer pt-1">
+            <input
+              type="checkbox"
+              checked={filters.includeUnknownPrice ?? false}
+              onChange={(e) =>
+                onFilterChange({ ...filters, includeUnknownPrice: e.target.checked, page: 1 })
+              }
+              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+            />
+            <span>รวมแผนที่ยังไม่ระบุราคา</span>
+          </label>
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold text-slate-700">ช่วงทุนประกัน (บาท)</label>
+          <div className="grid grid-cols-2 gap-2">
+            <input
+              type="number"
+              min={0}
+              step={50000}
+              placeholder="ทุนต่ำสุด"
+              value={filters.minSumInsured ?? ''}
+              onChange={(e) =>
+                onFilterChange({
+                  ...filters,
+                  minSumInsured: e.target.value !== '' ? parseFloat(e.target.value) : undefined,
+                  page: 1,
+                })
+              }
+              className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <input
+              type="number"
+              min={0}
+              step={50000}
+              placeholder="ทุนสูงสุด"
+              value={filters.maxSumInsured ?? ''}
+              onChange={(e) =>
+                onFilterChange({
+                  ...filters,
+                  maxSumInsured: e.target.value !== '' ? parseFloat(e.target.value) : undefined,
+                  page: 1,
+                })
+              }
+              className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* 7. All Required Coverages (Section 10.2: ALL 15 standard categories) */}
       <div className="space-y-2 pt-2 border-t border-slate-100">
         <div className="flex items-center justify-between">
           <div>

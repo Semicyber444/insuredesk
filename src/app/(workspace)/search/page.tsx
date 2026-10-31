@@ -1,8 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { SearchFilters, InsuranceSearchResultItem } from '@/types/insurance';
-import { searchInsuranceOptions } from '@/lib/queries/search';
+import { Insurer, VehicleModel, CoverageType } from '@/types/database';
+import { searchInsuranceOptions, buildSearchResultItems } from '@/lib/queries/search';
+import { getInsurers, getVehicleModels, getCoverageTypes } from '@/lib/queries/insurers';
+import { InsuranceStore } from '@/lib/store/insuranceStore';
 import { MOCK_INSURERS, MOCK_VEHICLE_MODELS, MOCK_COVERAGE_TYPES } from '@/lib/queries/mockData';
 import { FilterSidebar } from '@/components/search/FilterSidebar';
 import { PriceOptionCard } from '@/components/search/PriceOptionCard';
@@ -15,6 +18,11 @@ export default function SearchPage() {
     pageSize: 20,
     sortBy: 'premium_asc',
   });
+
+  const [insurers, setInsurers] = useState<Insurer[]>(MOCK_INSURERS);
+  const [vehicleModels, setVehicleModels] = useState<VehicleModel[]>(MOCK_VEHICLE_MODELS);
+  const [coverageTypes, setCoverageTypes] = useState<CoverageType[]>(MOCK_COVERAGE_TYPES);
+  const [allOptionsPool, setAllOptionsPool] = useState<InsuranceSearchResultItem[]>([]);
 
   const [results, setResults] = useState<{
     items: InsuranceSearchResultItem[];
@@ -31,14 +39,41 @@ export default function SearchPage() {
   const [selectedForCompare, setSelectedForCompare] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  const handleFilterChange = useCallback((nextFilters: SearchFilters) => {
+    setIsLoading(true);
+    setFilters(nextFilters);
+  }, []);
+
+  // Load dynamic reference data & saved compare basket on mount
+  useEffect(() => {
+    let isMounted = true;
+    Promise.all([getInsurers(true), getVehicleModels(), getCoverageTypes()]).then(
+      ([insList, vehList, covList]) => {
+        if (!isMounted) return;
+        setInsurers(insList);
+        setVehicleModels(vehList);
+        setCoverageTypes(covList);
+        const pool = buildSearchResultItems();
+        setAllOptionsPool(pool);
+        const validIds = new Set(pool.map((p) => p.id));
+        const savedBasket = InsuranceStore.getCompareBasket().filter((id) => validIds.has(id));
+        setSelectedForCompare(savedBasket);
+        InsuranceStore.setCompareBasket(savedBasket);
+      }
+    );
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // Execute search whenever filters change
   useEffect(() => {
     let isMounted = true;
-    setIsLoading(true);
 
     searchInsuranceOptions(filters).then((res) => {
       if (isMounted) {
         setResults(res);
+        setAllOptionsPool(buildSearchResultItems());
         setIsLoading(false);
       }
     });
@@ -50,14 +85,27 @@ export default function SearchPage() {
 
   const handleToggleCompare = (id: string) => {
     setSelectedForCompare((prev) => {
-      if (prev.includes(id)) {
-        return prev.filter((x) => x !== id);
-      }
-      if (prev.length >= 4) {
-        return prev;
-      }
-      return [...prev, id];
+      const next = prev.includes(id)
+        ? prev.filter((x) => x !== id)
+        : prev.length >= 4
+        ? prev
+        : [...prev, id];
+      InsuranceStore.setCompareBasket(next);
+      return next;
     });
+  };
+
+  const handleRemoveCompare = (id: string) => {
+    setSelectedForCompare((prev) => {
+      const next = prev.filter((x) => x !== id);
+      InsuranceStore.setCompareBasket(next);
+      return next;
+    });
+  };
+
+  const handleClearCompare = () => {
+    setSelectedForCompare([]);
+    InsuranceStore.setCompareBasket([]);
   };
 
   return (
@@ -69,7 +117,7 @@ export default function SearchPage() {
             ค้นหาและเปรียบเทียบประกันภัยรถยนต์
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            ฐานข้อมูลเงื่อนไขและราคาอ้างอิงภายในทีม อัปเดตล่าสุดปี 2569
+            ฐานข้อมูลเงื่อนไขและราคาอ้างอิงภายในทีม เฉพาะแพ็กเกจที่ผ่านการอนุมัติเผยแพร่แล้ว
           </p>
         </div>
 
@@ -80,9 +128,9 @@ export default function SearchPage() {
           <select
             value={filters.sortBy ?? 'premium_asc'}
             onChange={(e) =>
-              setFilters({
+              handleFilterChange({
                 ...filters,
-                sortBy: e.target.value as any,
+                sortBy: e.target.value as SearchFilters['sortBy'],
                 page: 1,
               })
             }
@@ -101,10 +149,10 @@ export default function SearchPage() {
         {/* Filter Sidebar */}
         <FilterSidebar
           filters={filters}
-          onFilterChange={setFilters}
-          insurers={MOCK_INSURERS}
-          vehicleModels={MOCK_VEHICLE_MODELS}
-          coverageTypes={MOCK_COVERAGE_TYPES}
+          onFilterChange={handleFilterChange}
+          insurers={insurers}
+          vehicleModels={vehicleModels}
+          coverageTypes={coverageTypes}
           totalResults={results.totalCount}
         />
 
@@ -150,8 +198,9 @@ export default function SearchPage() {
                   {Array.from({ length: results.totalPages }).map((_, idx) => (
                     <button
                       key={idx}
-                      onClick={() => setFilters({ ...filters, page: idx + 1 })}
-                      className={`w-9 h-9 rounded-lg text-xs font-bold transition ${
+                      type="button"
+                      onClick={() => handleFilterChange({ ...filters, page: idx + 1 })}
+                      className={`w-9 h-9 rounded-lg text-xs font-bold transition cursor-pointer ${
                         results.page === idx + 1
                           ? 'bg-blue-600 text-white shadow-xs'
                           : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
@@ -170,9 +219,9 @@ export default function SearchPage() {
       {/* Floating compare dock at bottom of page */}
       <ComparisonFloatingDock
         selectedIds={selectedForCompare}
-        allItems={results.items}
-        onRemove={(id) => setSelectedForCompare((prev) => prev.filter((x) => x !== id))}
-        onClear={() => setSelectedForCompare([])}
+        allItems={allOptionsPool.length > 0 ? allOptionsPool : results.items}
+        onRemove={handleRemoveCompare}
+        onClear={handleClearCompare}
       />
     </div>
   );

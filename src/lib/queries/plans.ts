@@ -1,8 +1,30 @@
 import { InsuranceStore } from '@/lib/store/insuranceStore';
-import { Plan, PlanVersion } from '@/types/database';
+import { Insurer, Plan, PlanVersion, WorkflowStatus } from '@/types/database';
 
-export async function getAllPlans() {
-  const plans = InsuranceStore.getPlans();
+export interface PlanListItem extends Plan {
+  insurerName: string;
+  versionsCount: number;
+  currentStatus: WorkflowStatus;
+  latestVersionNo: number;
+  activeVersionId?: string;
+}
+
+export interface PlanDetailData extends Plan {
+  insurer?: Insurer;
+  versions: PlanVersion[];
+}
+
+export interface PendingReviewItem {
+  version: PlanVersion;
+  plan?: Plan;
+  insurer?: Insurer;
+  documentsCount: number;
+  priceOptionsCount: number;
+}
+
+export async function getAllPlans(includeArchived = false): Promise<PlanListItem[]> {
+  const allPlans = InsuranceStore.getPlans();
+  const plans = includeArchived ? allPlans : allPlans.filter((p) => !p.is_archived);
   const insurers = InsuranceStore.getInsurers();
   const versions = InsuranceStore.getVersions();
 
@@ -20,11 +42,12 @@ export async function getAllPlans() {
       versionsCount: planVersions.length,
       currentStatus: activeVersion?.workflow_status ?? 'draft',
       latestVersionNo: activeVersion?.version_no ?? (planVersions[0]?.version_no ?? 1),
+      activeVersionId: activeVersion?.id,
     };
   });
 }
 
-export async function getPlanById(planId: string) {
+export async function getPlanById(planId: string): Promise<PlanDetailData | null> {
   const plans = InsuranceStore.getPlans();
   const plan = plans.find((p) => p.id === planId);
   if (!plan) return null;
@@ -42,7 +65,7 @@ export async function getPlanById(planId: string) {
   };
 }
 
-export async function getPendingReviews() {
+export async function getPendingReviews(): Promise<PendingReviewItem[]> {
   const versions = InsuranceStore.getVersions();
   const inReviewVersions = versions.filter((v) => v.workflow_status === 'in_review');
   const plans = InsuranceStore.getPlans();
@@ -51,95 +74,49 @@ export async function getPendingReviews() {
   const rules = InsuranceStore.getEligibilityRules();
   const options = InsuranceStore.getPriceOptions();
 
-  return inReviewVersions.map((version) => {
-    const plan = plans.find((p) => p.id === version.plan_id);
-    const insurer = insurers.find((i) => i.id === plan?.insurer_id);
-    const versionDocs = docs.filter((d) => d.plan_version_id === version.id);
-    const versionRules = rules.filter((r) => r.plan_version_id === version.id);
-    const ruleIds = versionRules.map((r) => r.id);
-    const versionOptions = options.filter((o) => ruleIds.includes(o.eligibility_rule_id));
+  return inReviewVersions
+    .map((version) => {
+      const plan = plans.find((p) => p.id === version.plan_id);
+      const insurer = insurers.find((i) => i.id === plan?.insurer_id);
+      const versionDocs = docs.filter((d) => d.plan_version_id === version.id);
+      const versionRules = rules.filter((r) => r.plan_version_id === version.id);
+      const ruleIds = versionRules.map((r) => r.id);
+      const versionOptions = options.filter((o) => ruleIds.includes(o.eligibility_rule_id));
 
-    return {
-      version,
-      plan,
-      insurer,
-      documentsCount: versionDocs.length,
-      priceOptionsCount: versionOptions.length,
-    };
-  });
+      return {
+        version,
+        plan,
+        insurer,
+        documentsCount: versionDocs.length,
+        priceOptionsCount: versionOptions.length,
+      };
+    })
+    .filter((item) => !item.plan?.is_archived);
 }
 
-export async function submitForReview(versionId: string, reason: string, actorName = 'เจ้าหน้าที่กรอกข้อมูล') {
-  const versions = InsuranceStore.getVersions();
-  const version = versions.find((v) => v.id === versionId);
-  if (!version) throw new Error('ไม่พบเวอร์ชันที่ระบุ');
-
-  version.workflow_status = 'in_review';
-  version.updated_at = new Date().toISOString();
-
-  // Save audit
-  const auditLogs = InsuranceStore.getAuditLogs();
-  auditLogs.unshift({
-    id: `audit-${Date.now()}`,
-    actor_name: actorName,
-    action: 'submit_review',
-    entity_type: 'plan_version',
-    entity_id: versionId,
-    before_data: { workflow_status: 'draft' },
-    after_data: { workflow_status: 'in_review' },
-    reason,
-    created_at: new Date().toISOString(),
-  });
-
+export async function submitForReview(
+  versionId: string,
+  reason: string,
+  actorName = 'เจ้าหน้าที่กรอกข้อมูล'
+) {
+  InsuranceStore.submitForReview(versionId, reason, actorName);
   return { success: true };
 }
 
-export async function publishPlanVersion(versionId: string, reason: string, actorName = 'ผู้ตรวจสอบ') {
-  const versions = InsuranceStore.getVersions();
-  const version = versions.find((v) => v.id === versionId);
-  if (!version) throw new Error('ไม่พบเวอร์ชันที่ระบุ');
-
-  const beforeStatus = version.workflow_status;
-  version.workflow_status = 'published';
-  version.verified_at = new Date().toISOString();
-  version.updated_at = new Date().toISOString();
-
-  const auditLogs = InsuranceStore.getAuditLogs();
-  auditLogs.unshift({
-    id: `audit-${Date.now()}`,
-    actor_name: actorName,
-    action: 'publish',
-    entity_type: 'plan_version',
-    entity_id: versionId,
-    before_data: { workflow_status: beforeStatus },
-    after_data: { workflow_status: 'published' },
-    reason,
-    created_at: new Date().toISOString(),
-  });
-
+export async function publishPlanVersion(
+  versionId: string,
+  reason: string,
+  actorName = 'ผู้ตรวจสอบ'
+) {
+  InsuranceStore.publishPlanVersion(versionId, reason, actorName);
   return { success: true };
 }
 
-export async function rejectPlanVersion(versionId: string, reason: string, actorName = 'ผู้ตรวจสอบ') {
-  const versions = InsuranceStore.getVersions();
-  const version = versions.find((v) => v.id === versionId);
-  if (!version) throw new Error('ไม่พบเวอร์ชันที่ระบุ');
-
-  version.workflow_status = 'draft';
-  version.updated_at = new Date().toISOString();
-
-  const auditLogs = InsuranceStore.getAuditLogs();
-  auditLogs.unshift({
-    id: `audit-${Date.now()}`,
-    actor_name: actorName,
-    action: 'reject',
-    entity_type: 'plan_version',
-    entity_id: versionId,
-    before_data: { workflow_status: 'in_review' },
-    after_data: { workflow_status: 'draft' },
-    reason,
-    created_at: new Date().toISOString(),
-  });
-
+export async function rejectPlanVersion(
+  versionId: string,
+  reason: string,
+  actorName = 'ผู้ตรวจสอบ'
+) {
+  InsuranceStore.rejectPlanVersion(versionId, reason, actorName);
   return { success: true };
 }

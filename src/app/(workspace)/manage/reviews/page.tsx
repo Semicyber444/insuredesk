@@ -1,11 +1,19 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { getPendingReviews, publishPlanVersion, rejectPlanVersion } from '@/lib/queries/plans';
-import { FileCheck, Check, X, FileText, AlertCircle, Clock, ShieldAlert } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
+import {
+  getPendingReviews,
+  PendingReviewItem,
+  publishPlanVersion,
+  rejectPlanVersion,
+} from '@/lib/queries/plans';
+import { useAuth } from '@/lib/auth/AuthContext';
+import { FileCheck, Check, X, Clock, ExternalLink, AlertCircle, Lock } from 'lucide-react';
 
 export default function ReviewManagementPage() {
-  const [reviews, setReviews] = useState<any[]>([]);
+  const { userName, can } = useAuth();
+  const [reviews, setReviews] = useState<PendingReviewItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeActionModal, setActiveActionModal] = useState<{
     versionId: string;
@@ -13,35 +21,65 @@ export default function ReviewManagementPage() {
     planName: string;
   } | null>(null);
   const [reason, setReason] = useState('');
+  const [actionError, setActionError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const loadData = () => {
+  const reloadData = useCallback(() => {
     setIsLoading(true);
     getPendingReviews().then((res) => {
       setReviews(res);
       setIsLoading(false);
     });
-  };
+  }, []);
 
   useEffect(() => {
-    loadData();
+    let isMounted = true;
+    getPendingReviews().then((res) => {
+      if (!isMounted) return;
+      setReviews(res);
+      setIsLoading(false);
+    });
+    return () => {
+      isMounted = false;
+    };
   }, []);
+
+  if (!can('canReview')) {
+    return (
+      <div className="max-w-xl mx-auto px-4 py-20 text-center space-y-3">
+        <div className="w-14 h-14 rounded-2xl bg-red-50 text-red-600 border border-red-200 flex items-center justify-center mx-auto">
+          <Lock className="w-6 h-6" />
+        </div>
+        <h2 className="text-lg font-black text-slate-900">ไม่มีสิทธิ์เข้าถึงคิวตรวจสอบข้อมูล</h2>
+        <p className="text-xs text-slate-500">
+          หน้านี้จำกัดเฉพาะบทบาทผู้ตรวจสอบ (Reviewer) และผู้ดูแลระบบ (Admin) เท่านั้น
+        </p>
+        <Link
+          href="/search"
+          className="inline-flex items-center gap-1.5 bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-bold"
+        >
+          กลับไปหน้าค้นหาประกัน
+        </Link>
+      </div>
+    );
+  }
 
   const handleConfirmAction = async () => {
     if (!activeActionModal || !reason.trim()) return;
 
     setIsSubmitting(true);
+    setActionError('');
     try {
       if (activeActionModal.action === 'publish') {
-        await publishPlanVersion(activeActionModal.versionId, reason);
+        await publishPlanVersion(activeActionModal.versionId, reason.trim(), userName);
       } else {
-        await rejectPlanVersion(activeActionModal.versionId, reason);
+        await rejectPlanVersion(activeActionModal.versionId, reason.trim(), userName);
       }
       setActiveActionModal(null);
       setReason('');
-      loadData();
-    } catch (e: any) {
-      alert(e.message || 'เกิดข้อผิดพลาด');
+      reloadData();
+    } catch (e: unknown) {
+      setActionError(e instanceof Error ? e.message : 'เกิดข้อผิดพลาดในการดำเนินการ');
     } finally {
       setIsSubmitting(false);
     }
@@ -70,16 +108,21 @@ export default function ReviewManagementPage() {
               <Check className="w-6 h-6" />
             </div>
             <h3 className="text-sm font-bold text-slate-800">ไม่มีรายการค้างตรวจในระบบ</h3>
-            <p className="text-xs text-slate-500 mt-1">ข้อมูลแพ็กเกจทั้งหมดได้รับการตรวจสอบและเผยแพร่เรียบร้อยแล้ว</p>
+            <p className="text-xs text-slate-500 mt-1">
+              ข้อมูลแพ็กเกจทั้งหมดได้รับการตรวจสอบและเผยแพร่เรียบร้อยแล้ว
+            </p>
           </div>
         ) : (
           <div className="divide-y divide-slate-100">
             {reviews.map(({ version, plan, insurer, documentsCount, priceOptionsCount }) => (
-              <div key={version.id} className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-slate-50/50 transition">
+              <div
+                key={version.id}
+                className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-slate-50/50 transition"
+              >
                 <div className="space-y-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="text-xs font-bold text-blue-800 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                      {insurer?.name}
+                      {insurer?.name || 'ไม่ระบุบริษัท'}
                     </span>
                     <span className="text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700">
                       {plan?.insurance_type}
@@ -89,37 +132,60 @@ export default function ReviewManagementPage() {
                       รอตรวจสอบ (In Review)
                     </span>
                   </div>
-                  <h3 className="text-base font-bold text-slate-900">{plan?.name}</h3>
-                  <div className="flex items-center gap-4 text-xs text-slate-500 pt-1">
-                    <span>รุ่นที่: <strong>{version.version_no}</strong></span>
-                    <span>ตัวเลือกราคา: <strong>{priceOptionsCount} รายการ</strong></span>
-                    <span>เอกสารแนบ: <strong>{documentsCount} ฉบับ</strong></span>
-                    {version.notes && <span className="text-slate-600 italic">&quot;{version.notes}&quot;</span>}
+                  <div className="flex items-center gap-2 pt-0.5">
+                    <h3 className="text-base font-bold text-slate-900">{plan?.name}</h3>
+                    {plan && (
+                      <Link
+                        href={`/plans/${plan.id}`}
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:underline"
+                      >
+                        <span>ตรวจดูรายละเอียด</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </Link>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500 pt-1">
+                    <span>
+                      รุ่นที่: <strong>{version.version_no}</strong>
+                    </span>
+                    <span>
+                      ตัวเลือกราคา: <strong>{priceOptionsCount} รายการ</strong>
+                    </span>
+                    <span className={documentsCount === 0 ? 'text-red-600 font-semibold' : ''}>
+                      เอกสารแนบ: <strong>{documentsCount} ฉบับ</strong>
+                    </span>
+                    {version.notes && (
+                      <span className="text-slate-600 italic">&quot;{version.notes}&quot;</span>
+                    )}
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
                   <button
-                    onClick={() =>
+                    type="button"
+                    onClick={() => {
+                      setActionError('');
                       setActiveActionModal({
                         versionId: version.id,
                         action: 'reject',
                         planName: plan?.name ?? '',
-                      })
-                    }
+                      });
+                    }}
                     className="px-3.5 py-2 text-xs font-bold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-xl transition flex items-center gap-1.5 cursor-pointer"
                   >
                     <X className="w-3.5 h-3.5" />
                     <span>ส่งกลับแก้ไข</span>
                   </button>
                   <button
-                    onClick={() =>
+                    type="button"
+                    onClick={() => {
+                      setActionError('');
                       setActiveActionModal({
                         versionId: version.id,
                         action: 'publish',
                         planName: plan?.name ?? '',
-                      })
-                    }
+                      });
+                    }}
                     className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
                   >
                     <Check className="w-3.5 h-3.5" />
@@ -147,9 +213,18 @@ export default function ReviewManagementPage() {
                 </div>
               )}
               <h3 className="text-base font-bold text-slate-900">
-                {activeActionModal.action === 'publish' ? 'ยืนยันการเผยแพร่ข้อมูล' : 'ส่งกลับให้ผู้กรอกแก้ไข'}
+                {activeActionModal.action === 'publish'
+                  ? 'ยืนยันการเผยแพร่ข้อมูล'
+                  : 'ส่งกลับให้ผู้กรอกแก้ไข'}
               </h3>
             </div>
+
+            {actionError && (
+              <div className="p-2.5 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                <span>{actionError}</span>
+              </div>
+            )}
 
             <p className="text-xs text-slate-600">
               แพ็กเกจ: <strong>{activeActionModal.planName}</strong>
@@ -178,6 +253,7 @@ export default function ReviewManagementPage() {
                 onClick={() => {
                   setActiveActionModal(null);
                   setReason('');
+                  setActionError('');
                 }}
                 className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
               >

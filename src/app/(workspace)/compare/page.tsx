@@ -1,52 +1,37 @@
 'use client';
 
 import { useSearchParams, useRouter } from 'next/navigation';
-import { useState, useEffect, Suspense, useMemo, Fragment } from 'react';
+import { useState, useEffect, Suspense, Fragment } from 'react';
 import Link from 'next/link';
 import { getComparisonData, ComparisonResult } from '@/lib/queries/compare';
+import { InsuranceStore } from '@/lib/store/insuranceStore';
+import { useAuth } from '@/lib/auth/AuthContext';
 import { InsuranceSearchResultItem } from '@/types/insurance';
 import {
   Columns3,
   AlertTriangle,
-  FileText,
   ArrowLeft,
-  CheckCircle2,
-  MinusCircle,
-  HelpCircle,
   ShieldAlert,
-  SlidersHorizontal,
-  ExternalLink,
   Printer,
   Sparkles,
-  Car,
   Shield,
-  Users,
-  HeartPulse,
-  Trash2,
-  Check,
-  Building2,
-  Wrench,
-  ChevronDown,
-  ChevronUp,
   RotateCcw,
-  FileSpreadsheet,
-  Award,
-  Calendar,
-  Clock,
-  PhoneCall,
-  CheckSquare
+  X,
 } from 'lucide-react';
 
 function CompareContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { userName } = useAuth();
   const idsParam = searchParams.get('ids');
+  const currentKey = idsParam ?? '__basket__';
 
   const [data, setData] = useState<ComparisonResult | null>(null);
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [onlyDifferences, setOnlyDifferences] = useState(false);
-  const [isWarningsOpen, setIsWarningsOpen] = useState(false); // Closed by default to keep page clean
-  const [viewMode, setViewMode] = useState<'quotation' | 'table'>('quotation');
-  const [isLoading, setIsLoading] = useState(true);
+  const [isWarningsOpen, setIsWarningsOpen] = useState(false);
+
+  const isLoading = loadedKey !== currentKey;
 
   useEffect(() => {
     const prevTitle = document.title;
@@ -57,27 +42,33 @@ function CompareContent() {
   }, []);
 
   useEffect(() => {
-    let ids: string[] = [];
-    if (idsParam) {
-      ids = idsParam.split(',').filter(Boolean);
+    let isMounted = true;
+    const urlIds = idsParam ? idsParam.split(',').filter(Boolean).slice(0, 4) : [];
+    const targetIds = urlIds.length >= 2 ? urlIds : InsuranceStore.getCompareBasket().slice(0, 4);
+
+    if (urlIds.length >= 2) {
+      InsuranceStore.setCompareBasket(urlIds);
     }
 
-    if (ids.length >= 2) {
-      setIsLoading(true);
-      getComparisonData(ids).then((res) => {
-        setData(res);
-        setIsLoading(false);
+    Promise.resolve()
+      .then(() => (targetIds.length >= 2 ? getComparisonData(targetIds) : null))
+      .then((res) => {
+        if (isMounted) {
+          setData(res);
+          setLoadedKey(currentKey);
+        }
       });
-    } else {
-      setData(null);
-      setIsLoading(false);
-    }
-  }, [idsParam]);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [idsParam, currentKey]);
 
   const handleRemoveOption = (optionIdToRemove: string) => {
     if (!data) return;
     const remainingIds = data.options.filter((o) => o.id !== optionIdToRemove).map((o) => o.id);
-    if (remainingIds.length > 0) {
+    InsuranceStore.setCompareBasket(remainingIds);
+    if (remainingIds.length >= 2) {
       router.push(`/compare?ids=${remainingIds.join(',')}`);
     } else {
       router.push('/search');
@@ -85,6 +76,7 @@ function CompareContent() {
   };
 
   const handleClearAll = () => {
+    InsuranceStore.setCompareBasket([]);
     router.push('/search');
   };
 
@@ -126,14 +118,16 @@ function CompareContent() {
 
   const { options, warnings, categories } = data;
 
-  // Differences Detection
-  const isDiffSumInsured = new Set(options.map((o) => o.sumInsuredMax ?? o.sumInsuredMin ?? 0)).size > 1;
-  const isDiffPremium = new Set(options.map((o) => o.premiumTotal ?? -1)).size > 1;
+  // Differences Detection (Never map null sum insured to 0)
+  const isDiffSumInsured =
+    new Set(options.map((o) => o.sumInsuredMax ?? o.sumInsuredMin ?? 'UNKNOWN')).size > 1;
   const isDiffRepairType = new Set(options.map((o) => o.repairType)).size > 1;
   const isDiffDeductible = new Set(options.map((o) => o.deductibleAmount ?? 0)).size > 1;
   const isDiffCompulsory = new Set(options.map((o) => o.compulsoryIncluded)).size > 1;
   const isDiffDriver = new Set(options.map((o) => o.driverConditions || 'ไม่จำกัดชื่อผู้ขับขี่')).size > 1;
-  const isDiffCarAge = new Set(options.map((o) => `${o.minCarAge ?? 1}-${o.maxCarAge ?? 10}`)).size > 1;
+  const isDiffCarAge =
+    new Set(options.map((o) => `${o.scopeType}:${o.vehicleModelId ?? ''}:${o.minCarAge ?? 1}-${o.maxCarAge ?? 10}`))
+      .size > 1;
 
   interface CoreSpecRow {
     id: string;
@@ -147,15 +141,18 @@ function CompareContent() {
       id: 'sum_insured',
       label: 'ทุนประกันภัย (บาท)',
       hasDifference: isDiffSumInsured,
-      renderValue: (opt) => (
-        <span className="font-bold text-slate-900">
-          {opt.sumInsuredMax ? (
-            `฿${opt.sumInsuredMax.toLocaleString('th-TH')}`
-          ) : (
-            <span className="text-slate-400">ตามเงื่อนไข</span>
-          )}
-        </span>
-      ),
+      renderValue: (opt) => {
+        const sumVal = opt.sumInsuredMax ?? opt.sumInsuredMin;
+        return (
+          <span className="font-bold text-slate-900">
+            {sumVal !== null && sumVal !== undefined ? (
+              `฿${sumVal.toLocaleString('th-TH')}`
+            ) : (
+              <span className="text-slate-400 font-normal">ยังไม่ระบุทุน</span>
+            )}
+          </span>
+        );
+      },
     },
     {
       id: 'repair_type',
@@ -174,7 +171,9 @@ function CompareContent() {
       renderValue: (opt) => (
         <span>
           {opt.deductibleAmount > 0 ? (
-            <span className="font-bold text-amber-800">฿{opt.deductibleAmount.toLocaleString()} บาท (เมื่อเป็นฝ่ายผิด)</span>
+            <span className="font-bold text-amber-800">
+              ฿{opt.deductibleAmount.toLocaleString()} บาท (เมื่อเป็นฝ่ายผิด)
+            </span>
           ) : (
             <span className="text-emerald-700 font-medium">ไม่มี (฿0)</span>
           )}
@@ -185,16 +184,20 @@ function CompareContent() {
       id: 'driver_conditions',
       label: 'เงื่อนไขผู้ขับขี่',
       hasDifference: isDiffDriver,
-      renderValue: (opt) => (
-        <span>{opt.driverConditions || 'ไม่จำกัดชื่อผู้ขับขี่'}</span>
-      ),
+      renderValue: (opt) => <span>{opt.driverConditions || 'ไม่จำกัดชื่อผู้ขับขี่'}</span>,
     },
     {
       id: 'compulsory',
       label: 'พ.ร.บ. คุ้มครองผู้ประสบภัย',
       hasDifference: isDiffCompulsory,
       renderValue: (opt) => (
-        <span>{opt.compulsoryIncluded === 'included' ? 'รวมในเบี้ยแล้ว' : 'ไม่รวม พ.ร.บ.'}</span>
+        <span>
+          {opt.compulsoryIncluded === 'included'
+            ? 'รวมในเบี้ยแล้ว'
+            : opt.compulsoryIncluded === 'unspecified'
+            ? 'ยังไม่ระบุ'
+            : 'ไม่รวม พ.ร.บ.'}
+        </span>
       ),
     },
     {
@@ -204,7 +207,9 @@ function CompareContent() {
       renderValue: (opt) => (
         <span>
           {opt.scopeType === 'specific_model'
-            ? `เฉพาะ ${opt.vehicleBrand} ${opt.vehicleModel}`
+            ? `เฉพาะ ${opt.vehicleBrand ?? ''} ${opt.vehicleModel ?? ''}`.trim()
+            : opt.scopeType === 'unknown'
+            ? 'ยังไม่ระบุขอบเขตรุ่นรถ'
             : `รถทั่วไปอายุ ${opt.minCarAge ?? 1}-${opt.maxCarAge ?? 10} ปี`}
         </span>
       ),
@@ -215,8 +220,44 @@ function CompareContent() {
     ? coreSpecs.filter((s) => s.hasDifference)
     : coreSpecs;
 
+  // Dynamic Summary Header across all compared options
+  const usageSet = new Set(options.map((o) => o.usageType || 'private'));
+  const usageSummary =
+    usageSet.size === 1
+      ? options[0].usageType === 'commercial'
+        ? 'รถยนต์เชิงพาณิชย์ / รับจ้าง'
+        : options[0].usageType === 'all'
+        ? 'รองรับทุกรูปแบบการใช้งาน'
+        : 'รถยนต์ใช้งานส่วนบุคคล'
+      : 'แตกต่างกันตามแต่ละแผน';
+
+  const scopeSummary = (() => {
+    const scopes = new Set(
+      options.map((o) =>
+        o.scopeType === 'specific_model'
+          ? `เฉพาะ ${o.vehicleBrand ?? ''} ${o.vehicleModel ?? ''}`.trim()
+          : o.scopeType === 'unknown'
+          ? 'ยังไม่ระบุขอบเขตรุ่นรถ'
+          : 'รองรับทุกรุ่นภายใต้เงื่อนไข'
+      )
+    );
+    return scopes.size === 1 ? Array.from(scopes)[0] : 'ตามเงื่อนไขแต่ละแผน (ดูในตาราง)';
+  })();
+
+  const ageSummary = (() => {
+    const ages = new Set(options.map((o) => `อายุ ${o.minCarAge ?? 1} - ${o.maxCarAge ?? 10} ปี`));
+    return ages.size === 1 ? Array.from(ages)[0] : 'แตกต่างกันตามแต่ละแผน';
+  })();
+
+  const inspectionSummary = options.every((o) => o.inspectionRequired)
+    ? 'ต้องตรวจสภาพรถก่อนทำประกัน'
+    : options.every((o) => !o.inspectionRequired)
+    ? 'ไม่ต้องตรวจสภาพรถ'
+    : 'ขึ้นอยู่กับแผนที่เลือก';
+
   // Quotation Document Metadata
   const today = new Date();
+  const thaiBuddhistYear = today.getFullYear() + 543;
   const dateFormattedThai = today.toLocaleDateString('th-TH', {
     year: 'numeric',
     month: 'long',
@@ -229,7 +270,9 @@ function CompareContent() {
     month: 'long',
     day: 'numeric',
   });
-  const quotationNo = `QT-${today.getFullYear() + 543}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}-${options[0]?.id.slice(-4) || '01'}`;
+  const quotationNo = `QT-${thaiBuddhistYear}${String(today.getMonth() + 1).padStart(2, '0')}${String(
+    today.getDate()
+  ).padStart(2, '0')}-${options[0]?.id.slice(-4) || '01'}`;
 
   return (
     <div className="max-w-5xl mx-auto px-2 sm:px-4 py-4 sm:py-6 space-y-4">
@@ -413,23 +456,19 @@ function CompareContent() {
         <div className="bg-slate-50 border border-slate-200 rounded-lg p-2 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px]">
           <div>
             <span className="text-slate-500 block">ประเภทการใช้งาน:</span>
-            <span className="font-bold text-slate-800">รถยนต์นั่งส่วนบุคคล (รหัส 110)</span>
+            <span className="font-bold text-slate-800">{usageSummary}</span>
           </div>
           <div>
             <span className="text-slate-500 block">ขอบเขตรุ่นรถยนต์:</span>
-            <span className="font-bold text-slate-800">
-              {options[0]?.scopeType === 'specific_model' ? `${options[0].vehicleBrand} ${options[0].vehicleModel}` : 'รองรับทุกรุ่นภายใต้เงื่อนไข'}
-            </span>
+            <span className="font-bold text-slate-800">{scopeSummary}</span>
           </div>
           <div>
             <span className="text-slate-500 block">อายุรถยนต์ที่รับประกัน:</span>
-            <span className="font-bold text-slate-800">อายุ {options[0]?.minCarAge ?? 1} - {options[0]?.maxCarAge ?? 10} ปี</span>
+            <span className="font-bold text-slate-800">{ageSummary}</span>
           </div>
           <div>
             <span className="text-slate-500 block">การตรวจสภาพรถ:</span>
-            <span className="font-bold text-slate-800">
-              {options.some(o => o.inspectionRequired) ? 'ตรวจสภาพก่อนทำ' : 'ไม่ต้องตรวจสภาพรถ'}
-            </span>
+            <span className="font-bold text-slate-800">{inspectionSummary}</span>
           </div>
         </div>
 
@@ -458,49 +497,75 @@ function CompareContent() {
                   </div>
                 </th>
 
-                {options.map((opt, idx) => (
-                  <th key={opt.id} className="p-2 text-center align-top border-r border-slate-300 bg-white">
-                    <div className="space-y-1">
-                      {/* Plan Option Number Tag */}
-                      <div className="flex items-center justify-between text-[9px] font-bold pb-1 border-b border-slate-100">
-                        <span className="bg-blue-100 text-blue-900 px-1.5 py-0.2 rounded font-black">
-                          ตัวเลือกที่ {idx + 1}
-                        </span>
-                        <span className="text-slate-500">{opt.insuranceType}</span>
-                      </div>
+                {options.map((opt, idx) => {
+                  const sumVal = opt.sumInsuredMax ?? opt.sumInsuredMin;
+                  const compulsoryLabel =
+                    opt.compulsoryIncluded === 'included'
+                      ? 'รวม พ.ร.บ.'
+                      : opt.compulsoryIncluded === 'unspecified'
+                      ? 'ยังไม่ระบุ พ.ร.บ.'
+                      : 'ไม่รวม พ.ร.บ.';
 
-                      {/* Insurer Name & Plan Name */}
-                      <div className="min-h-[30px] flex flex-col justify-center">
-                        <div className="font-bold text-[10.5px] text-slate-900 leading-tight line-clamp-1">
-                          {opt.insurerName}
+                  return (
+                    <th key={opt.id} className="p-2 text-center align-top border-r border-slate-300 bg-white">
+                      <div className="space-y-1">
+                        {/* Plan Option Number Tag */}
+                        <div className="flex items-center justify-between text-[9px] font-bold pb-1 border-b border-slate-100">
+                          <span className="bg-blue-100 text-blue-900 px-1.5 py-0.2 rounded font-black">
+                            ตัวเลือกที่ {idx + 1}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <span className="text-slate-500">{opt.insuranceType}</span>
+                            {options.length > 2 && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveOption(opt.id)}
+                                title="นำตัวเลือกนี้ออก"
+                                className="no-print text-slate-400 hover:text-red-600 p-0.5 rounded transition cursor-pointer"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
                         </div>
-                        <div className="text-[9.5px] text-slate-600 line-clamp-1">
-                          {opt.planName}
-                        </div>
-                      </div>
 
-                      {/* Premium Price Box (Quotation Highlight) */}
-                      <div className="bg-blue-50/80 border border-blue-200 rounded-md p-1.5 my-1">
-                        <span className="text-[9px] text-blue-800 block">เบี้ยประกันภัยสุทธิ (รวม พ.ร.บ.)</span>
-                        <div className="text-base font-black text-blue-950 tracking-tight">
-                          {opt.premiumTotal ? (
-                            `฿${opt.premiumTotal.toLocaleString('th-TH')}`
-                          ) : (
-                            <span className="text-xs text-amber-700">ยังไม่ระบุราคา</span>
-                          )}
+                        {/* Insurer Name & Plan Name */}
+                        <div className="min-h-[30px] flex flex-col justify-center">
+                          <div className="font-bold text-[10.5px] text-slate-900 leading-tight line-clamp-1">
+                            {opt.insurerName}
+                          </div>
+                          <div className="text-[9.5px] text-slate-600 line-clamp-1">
+                            {opt.planName}
+                          </div>
                         </div>
-                        <span className="text-[8.5px] text-slate-500 block">
-                          {opt.repairType === 'dealer' ? 'ซ่อมห้าง (ศูนย์บริการ)' : 'ซ่อมอู่ (อู่ในเครือ)'}
-                        </span>
-                      </div>
 
-                      {/* Sum Insured Badge */}
-                      <div className="text-[9.5px] font-bold text-slate-800">
-                        ทุนประกัน ฿{(opt.sumInsuredMax || opt.sumInsuredMin || 0).toLocaleString()} บาท
+                        {/* Premium Price Box (Quotation Highlight — Section 9.3) */}
+                        <div className="bg-blue-50/80 border border-blue-200 rounded-md p-1.5 my-1">
+                          <span className="text-[9px] text-blue-800 block">
+                            เบี้ยประกันภัยรวม ({compulsoryLabel})
+                          </span>
+                          <div className="text-base font-black text-blue-950 tracking-tight">
+                            {opt.premiumTotal !== null && opt.premiumTotal !== undefined ? (
+                              `฿${opt.premiumTotal.toLocaleString('th-TH')}`
+                            ) : (
+                              <span className="text-xs text-amber-700">ยังไม่มีข้อมูลราคา</span>
+                            )}
+                          </div>
+                          <span className="text-[8.5px] text-slate-500 block">
+                            {opt.repairType === 'dealer' ? 'ซ่อมห้าง (ศูนย์บริการ)' : 'ซ่อมอู่ (อู่ในเครือ)'}
+                          </span>
+                        </div>
+
+                        {/* Sum Insured Badge (Never show ฿0 for null) */}
+                        <div className="text-[9.5px] font-bold text-slate-800">
+                          {sumVal !== null && sumVal !== undefined
+                            ? `ทุนประกัน ฿${sumVal.toLocaleString('th-TH')} บาท`
+                            : 'ยังไม่ระบุทุนประกัน'}
+                        </div>
                       </div>
-                    </div>
-                  </th>
-                ))}
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
 
@@ -586,10 +651,10 @@ function CompareContent() {
                                 <span className="text-slate-400 font-normal">ไม่คุ้มครอง</span>
                               )}
                               {isOptional && (
-                                <span className="text-amber-800 font-medium">ซื้อเพิ่มได้</span>
+                                <span className="text-amber-800 font-medium">{val.text}</span>
                               )}
                               {!isCovered && !isNotCovered && !isOptional && (
-                                <span className="text-slate-400">-</span>
+                                <span className="text-slate-400">ยังไม่ระบุ</span>
                               )}
                             </td>
                           );
@@ -620,7 +685,7 @@ function CompareContent() {
               <span className="font-bold text-slate-700 block">ผู้จัดทำใบเสนอราคา (Advisor)</span>
               <div className="h-6"></div>
               <div className="border-b border-slate-400 w-3/4 mx-auto"></div>
-              <span className="text-slate-600 block">( สมชาย ผู้ดูแลระบบ / ทีม InsureDesk )</span>
+              <span className="text-slate-600 block">( {userName} / ทีม InsureDesk )</span>
               <span className="text-slate-400 text-[8.5px] block">วันที่: {dateFormattedThai}</span>
             </div>
 
@@ -637,7 +702,9 @@ function CompareContent() {
               </div>
               <div className="border-b border-slate-400 w-3/4 mx-auto mt-2"></div>
               <span className="text-slate-600 block">ลงชื่อ: ................................................................</span>
-              <span className="text-slate-400 text-[8.5px] block">วันที่: ........ / ........ / 2569</span>
+              <span className="text-slate-400 text-[8.5px] block">
+                วันที่: ........ / ........ / {thaiBuddhistYear}
+              </span>
             </div>
           </div>
         </div>

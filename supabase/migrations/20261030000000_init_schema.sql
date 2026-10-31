@@ -65,7 +65,7 @@ create table if not exists public.vehicle_models (
     brand text not null,
     model text not null,
     variant text,
-    powertrain text check (powertrain in ('ICE', 'HEV', 'PHEV', 'BEV', 'other', null)),
+    powertrain text check (powertrain is null or powertrain in ('ICE', 'HEV', 'PHEV', 'BEV', 'other')),
     is_active boolean not null default true,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now()
@@ -115,8 +115,8 @@ create table if not exists public.eligibility_rules (
     vehicle_model_id uuid references public.vehicle_models(id) on delete set null,
     min_age integer check (min_age is null or min_age >= 0),
     max_age integer check (max_age is null or max_age >= 0),
-    age_basis text check (age_basis in ('registration_year', 'manufacture_year', null)),
-    usage_type text check (usage_type in ('private', 'commercial', 'all', null)),
+    age_basis text check (age_basis is null or age_basis in ('registration_year', 'manufacture_year')),
+    usage_type text check (usage_type is null or usage_type in ('private', 'commercial', 'all')),
     inspection_required boolean,
     notes text,
     created_at timestamptz not null default now(),
@@ -305,16 +305,25 @@ create policy "View plan versions by role" on public.plan_versions
     );
 
 create policy "Editors can insert draft plan versions" on public.plan_versions
-    for insert with check (public.has_role(auth.uid(), 'editor') or public.has_role(auth.uid(), 'admin'));
+    for insert with check (
+        (public.has_role(auth.uid(), 'editor') and workflow_status in ('draft', 'in_review')) or
+        public.has_role(auth.uid(), 'admin')
+    );
 
 create policy "Editors can update draft versions" on public.plan_versions
     for update using (
         (public.has_role(auth.uid(), 'editor') and workflow_status = 'draft') or
         public.has_role(auth.uid(), 'reviewer') or
         public.has_role(auth.uid(), 'admin')
+    )
+    with check (
+        (public.has_role(auth.uid(), 'editor') and workflow_status in ('draft', 'in_review')) or
+        public.has_role(auth.uid(), 'reviewer') or
+        public.has_role(auth.uid(), 'admin')
     );
 
 -- Child tables: Eligibility, Prices, Coverages, Documents
+-- Editors can only mutate child records while parent plan_version is in 'draft' (Section 12.3 & 14)
 create policy "View eligibility rules" on public.eligibility_rules
     for select using (
         exists (
@@ -330,7 +339,24 @@ create policy "View eligibility rules" on public.eligibility_rules
     );
 
 create policy "Manage eligibility rules" on public.eligibility_rules
-    for all using (public.has_role(auth.uid(), 'editor') or public.has_role(auth.uid(), 'admin'));
+    for all using (
+        public.has_role(auth.uid(), 'admin') or (
+            public.has_role(auth.uid(), 'editor') and exists (
+                select 1 from public.plan_versions pv
+                where pv.id = eligibility_rules.plan_version_id
+                  and pv.workflow_status = 'draft'
+            )
+        )
+    )
+    with check (
+        public.has_role(auth.uid(), 'admin') or (
+            public.has_role(auth.uid(), 'editor') and exists (
+                select 1 from public.plan_versions pv
+                where pv.id = eligibility_rules.plan_version_id
+                  and pv.workflow_status in ('draft', 'in_review')
+            )
+        )
+    );
 
 create policy "View price options" on public.price_options
     for select using (
@@ -348,7 +374,26 @@ create policy "View price options" on public.price_options
     );
 
 create policy "Manage price options" on public.price_options
-    for all using (public.has_role(auth.uid(), 'editor') or public.has_role(auth.uid(), 'admin'));
+    for all using (
+        public.has_role(auth.uid(), 'admin') or (
+            public.has_role(auth.uid(), 'editor') and exists (
+                select 1 from public.eligibility_rules er
+                join public.plan_versions pv on pv.id = er.plan_version_id
+                where er.id = price_options.eligibility_rule_id
+                  and pv.workflow_status = 'draft'
+            )
+        )
+    )
+    with check (
+        public.has_role(auth.uid(), 'admin') or (
+            public.has_role(auth.uid(), 'editor') and exists (
+                select 1 from public.eligibility_rules er
+                join public.plan_versions pv on pv.id = er.plan_version_id
+                where er.id = price_options.eligibility_rule_id
+                  and pv.workflow_status in ('draft', 'in_review')
+            )
+        )
+    );
 
 create policy "View version coverages" on public.version_coverages
     for select using (
@@ -365,7 +410,24 @@ create policy "View version coverages" on public.version_coverages
     );
 
 create policy "Manage version coverages" on public.version_coverages
-    for all using (public.has_role(auth.uid(), 'editor') or public.has_role(auth.uid(), 'admin'));
+    for all using (
+        public.has_role(auth.uid(), 'admin') or (
+            public.has_role(auth.uid(), 'editor') and exists (
+                select 1 from public.plan_versions pv
+                where pv.id = version_coverages.plan_version_id
+                  and pv.workflow_status = 'draft'
+            )
+        )
+    )
+    with check (
+        public.has_role(auth.uid(), 'admin') or (
+            public.has_role(auth.uid(), 'editor') and exists (
+                select 1 from public.plan_versions pv
+                where pv.id = version_coverages.plan_version_id
+                  and pv.workflow_status in ('draft', 'in_review')
+            )
+        )
+    );
 
 create policy "View overrides" on public.option_coverage_overrides
     for select using (
@@ -384,7 +446,28 @@ create policy "View overrides" on public.option_coverage_overrides
     );
 
 create policy "Manage overrides" on public.option_coverage_overrides
-    for all using (public.has_role(auth.uid(), 'editor') or public.has_role(auth.uid(), 'admin'));
+    for all using (
+        public.has_role(auth.uid(), 'admin') or (
+            public.has_role(auth.uid(), 'editor') and exists (
+                select 1 from public.price_options po
+                join public.eligibility_rules er on er.id = po.eligibility_rule_id
+                join public.plan_versions pv on pv.id = er.plan_version_id
+                where po.id = option_coverage_overrides.price_option_id
+                  and pv.workflow_status = 'draft'
+            )
+        )
+    )
+    with check (
+        public.has_role(auth.uid(), 'admin') or (
+            public.has_role(auth.uid(), 'editor') and exists (
+                select 1 from public.price_options po
+                join public.eligibility_rules er on er.id = po.eligibility_rule_id
+                join public.plan_versions pv on pv.id = er.plan_version_id
+                where po.id = option_coverage_overrides.price_option_id
+                  and pv.workflow_status in ('draft', 'in_review')
+            )
+        )
+    );
 
 create policy "View source documents" on public.source_documents
     for select using (
@@ -401,7 +484,24 @@ create policy "View source documents" on public.source_documents
     );
 
 create policy "Manage source documents" on public.source_documents
-    for all using (public.has_role(auth.uid(), 'editor') or public.has_role(auth.uid(), 'admin'));
+    for all using (
+        public.has_role(auth.uid(), 'admin') or (
+            public.has_role(auth.uid(), 'editor') and exists (
+                select 1 from public.plan_versions pv
+                where pv.id = source_documents.plan_version_id
+                  and pv.workflow_status = 'draft'
+            )
+        )
+    )
+    with check (
+        public.has_role(auth.uid(), 'admin') or (
+            public.has_role(auth.uid(), 'editor') and exists (
+                select 1 from public.plan_versions pv
+                where pv.id = source_documents.plan_version_id
+                  and pv.workflow_status in ('draft', 'in_review')
+            )
+        )
+    );
 
 -- Audit logs: Read by Reviewers and Admins only, insert by system/authenticated
 create policy "Reviewers and Admins can view audit logs" on public.audit_logs

@@ -9,7 +9,15 @@ import {
   SourceDocument,
   AuditLog,
   VehicleModel,
-  CoverageType
+  CoverageType,
+  InsuranceType,
+  WorkflowStatus,
+  ScopeType,
+  RepairType,
+  PriceType,
+  CompulsoryInclusion,
+  CoverageStatus,
+  SourceType,
 } from '@/types/database';
 import {
   MOCK_INSURERS,
@@ -22,7 +30,7 @@ import {
   MOCK_SOURCE_DOCUMENTS,
   MOCK_AUDIT_LOGS,
   MOCK_VEHICLE_MODELS,
-  MOCK_COVERAGE_TYPES
+  MOCK_COVERAGE_TYPES,
 } from '@/lib/queries/mockData';
 
 const STORAGE_KEYS = {
@@ -36,18 +44,43 @@ const STORAGE_KEYS = {
   DOCUMENTS: 'insuredesk_documents_v1',
   AUDIT: 'insuredesk_audit_v1',
   VEHICLES: 'insuredesk_vehicles_v1',
+  COMPARE_BASKET: 'insuredesk_compare_ids_v1',
 };
 
-// Helper to load or initialize from localStorage
+/**
+ * Returns YYYY-MM-DD formatted in Asia/Bangkok timezone (Section 8.1)
+ */
+export function getBangkokDateString(offsetDays = 0): string {
+  const target = new Date(Date.now() + offsetDays * 86_400_000);
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Bangkok',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(target);
+}
+
+// Helper to load or initialize from localStorage (falls back to in-memory store in Node/Vitest)
+const memoryStore = new Map<string, string>();
+
 function loadFromStorage<T>(key: string, defaultData: T): T {
-  if (typeof window === 'undefined') return defaultData;
+  if (typeof window === 'undefined') {
+    const mem = memoryStore.get(key);
+    if (!mem) {
+      const serialized = JSON.stringify(defaultData);
+      memoryStore.set(key, serialized);
+      return JSON.parse(serialized) as T;
+    }
+    return JSON.parse(mem) as T;
+  }
   try {
     const item = localStorage.getItem(key);
     if (!item) {
-      localStorage.setItem(key, JSON.stringify(defaultData));
-      return defaultData;
+      const serialized = JSON.stringify(defaultData);
+      localStorage.setItem(key, serialized);
+      return JSON.parse(serialized) as T;
     }
-    return JSON.parse(item);
+    return JSON.parse(item) as T;
   } catch (e) {
     console.error(`Error reading ${key} from storage:`, e);
     return defaultData;
@@ -55,54 +88,223 @@ function loadFromStorage<T>(key: string, defaultData: T): T {
 }
 
 function saveToStorage<T>(key: string, data: T): void {
-  if (typeof window === 'undefined') return;
+  const serialized = JSON.stringify(data);
+  if (typeof window === 'undefined') {
+    memoryStore.set(key, serialized);
+    return;
+  }
   try {
-    localStorage.setItem(key, JSON.stringify(data));
+    localStorage.setItem(key, serialized);
   } catch (e) {
     console.error(`Error writing ${key} to storage:`, e);
   }
 }
 
+export interface CreateOrUpdatePlanPayload {
+  planId?: string;
+  versionId?: string;
+  insurerId: string;
+  name: string;
+  insuranceType: InsuranceType;
+  workflowStatus?: WorkflowStatus;
+  effectiveFrom?: string | null;
+  effectiveTo?: string | null;
+  reviewDueAt?: string | null;
+  notes?: string;
+  actorName?: string;
+  // Eligibility
+  scopeType?: ScopeType;
+  vehicleModelId?: string | null;
+  minCarAge?: number | null;
+  maxCarAge?: number | null;
+  ageBasis?: 'registration_year' | 'manufacture_year' | null;
+  usageType?: 'private' | 'commercial' | 'all' | null;
+  inspectionRequired?: boolean;
+  // Price Options (supports multiple tiers for same plan)
+  priceOptions?: {
+    id?: string;
+    label?: string;
+    repairType: RepairType;
+    priceType?: PriceType;
+    premiumTotal?: number | null;
+    sumInsuredMin?: number | null;
+    sumInsuredMax?: number | null;
+    deductibleAmount?: number;
+    deductibleTerms?: string;
+    driverConditions?: string;
+    compulsoryIncluded?: CompulsoryInclusion;
+    validFrom?: string | null;
+    validTo?: string | null;
+  }[];
+  priceOptionLabel?: string;
+  repairType?: RepairType;
+  priceType?: PriceType;
+  premiumTotal?: number | null;
+  sumInsuredMin?: number | null;
+  sumInsuredMax?: number | null;
+  deductibleAmount?: number;
+  deductibleTerms?: string;
+  driverConditions?: string;
+  compulsoryIncluded?: CompulsoryInclusion;
+  // Coverages
+  coverages?: {
+    code: string;
+    status: CoverageStatus;
+    limitAmount?: number | null;
+    limitBasis?: string;
+    terms?: string;
+    exclusions?: string;
+  }[];
+  // Document
+  sourceType?: SourceType;
+  documentTitle?: string;
+  documentRef?: string;
+}
+
 export class InsuranceStore {
+  // Reset helper for unit tests
+  static resetMemoryStore(): void {
+    memoryStore.clear();
+  }
+
+  // Shared Compare Basket (2-4 option IDs)
+  static getCompareBasket(): string[] {
+    if (typeof window === 'undefined') return [];
+    try {
+      const raw = sessionStorage.getItem(STORAGE_KEYS.COMPARE_BASKET);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : [];
+    } catch {
+      return [];
+    }
+  }
+
+  static setCompareBasket(ids: string[]): void {
+    if (typeof window === 'undefined') return;
+    try {
+      sessionStorage.setItem(STORAGE_KEYS.COMPARE_BASKET, JSON.stringify(ids.slice(0, 4)));
+    } catch {
+      // Ignore storage errors
+    }
+  }
+
   // 1. Insurers
   static getInsurers(): Insurer[] {
     return loadFromStorage(STORAGE_KEYS.INSURERS, MOCK_INSURERS);
   }
 
-  static saveInsurer(data: Partial<Insurer> & { name: string }): Insurer {
+  static saveInsurer(
+    data: Partial<Insurer> & { name: string },
+    actorName = 'ผู้ใช้งาน'
+  ): Insurer {
     const insurers = this.getInsurers();
+    const auditLogs = this.getAuditLogs();
+
     if (data.id) {
-      // Edit existing
       const index = insurers.findIndex((i) => i.id === data.id);
       if (index !== -1) {
+        const before = { ...insurers[index] };
         insurers[index] = {
           ...insurers[index],
           ...data,
+          name: data.name.trim(),
+          contact_channels: data.contact_channels?.trim() || null,
+          website: data.website?.trim() || null,
           updated_at: new Date().toISOString(),
-        } as Insurer;
+        };
         saveToStorage(STORAGE_KEYS.INSURERS, insurers);
+
+        auditLogs.unshift({
+          id: `audit-${Date.now()}`,
+          actor_name: actorName,
+          action: 'update',
+          entity_type: 'insurer',
+          entity_id: insurers[index].id,
+          before_data: { name: before.name, is_active: before.is_active },
+          after_data: { name: insurers[index].name, is_active: insurers[index].is_active },
+          reason: `แก้ไขข้อมูลบริษัทประกันภัย "${insurers[index].name}"`,
+          created_at: new Date().toISOString(),
+        });
+        saveToStorage(STORAGE_KEYS.AUDIT, auditLogs);
         return insurers[index];
       }
     }
 
-    // Create new
     const newInsurer: Insurer = {
       id: data.id || `ins-${Date.now()}`,
-      name: data.name,
-      contact_channels: data.contact_channels || null,
-      website: data.website || null,
+      name: data.name.trim(),
+      contact_channels: data.contact_channels?.trim() || null,
+      website: data.website?.trim() || null,
       is_active: data.is_active ?? true,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
     insurers.unshift(newInsurer);
     saveToStorage(STORAGE_KEYS.INSURERS, insurers);
+
+    auditLogs.unshift({
+      id: `audit-${Date.now()}`,
+      actor_name: actorName,
+      action: 'create',
+      entity_type: 'insurer',
+      entity_id: newInsurer.id,
+      before_data: null,
+      after_data: { name: newInsurer.name },
+      reason: `เพิ่มบริษัทประกันภัย "${newInsurer.name}"`,
+      created_at: new Date().toISOString(),
+    });
+    saveToStorage(STORAGE_KEYS.AUDIT, auditLogs);
     return newInsurer;
   }
 
-  static deleteInsurer(id: string): void {
-    const insurers = this.getInsurers().filter((i) => i.id !== id);
-    saveToStorage(STORAGE_KEYS.INSURERS, insurers);
+  /**
+   * Section 8.1: Never hard-delete an insurer referenced by existing plans; deactivate instead.
+   */
+  static deleteInsurer(id: string, actorName = 'ผู้ใช้งาน'): { mode: 'deactivated' | 'deleted' } {
+    const plans = this.getPlans();
+    const hasLinkedPlans = plans.some((p) => p.insurer_id === id);
+    const insurers = this.getInsurers();
+    const auditLogs = this.getAuditLogs();
+    const target = insurers.find((i) => i.id === id);
+
+    if (hasLinkedPlans && target) {
+      target.is_active = false;
+      target.updated_at = new Date().toISOString();
+      saveToStorage(STORAGE_KEYS.INSURERS, insurers);
+
+      auditLogs.unshift({
+        id: `audit-${Date.now()}`,
+        actor_name: actorName,
+        action: 'archive',
+        entity_type: 'insurer',
+        entity_id: id,
+        before_data: { is_active: true },
+        after_data: { is_active: false },
+        reason: `ปิดการใช้งานบริษัท "${target.name}" แทนการลบ เนื่องจากมีแพ็กเกจผูกอยู่`,
+        created_at: new Date().toISOString(),
+      });
+      saveToStorage(STORAGE_KEYS.AUDIT, auditLogs);
+      return { mode: 'deactivated' };
+    }
+
+    const filtered = insurers.filter((i) => i.id !== id);
+    saveToStorage(STORAGE_KEYS.INSURERS, filtered);
+    if (target) {
+      auditLogs.unshift({
+        id: `audit-${Date.now()}`,
+        actor_name: actorName,
+        action: 'delete',
+        entity_type: 'insurer',
+        entity_id: id,
+        before_data: { name: target.name },
+        after_data: null,
+        reason: `ลบบริษัทประกันภัย "${target.name}" ที่ยังไม่มีแพ็กเกจผูกอยู่`,
+        created_at: new Date().toISOString(),
+      });
+      saveToStorage(STORAGE_KEYS.AUDIT, auditLogs);
+    }
+    return { mode: 'deleted' };
   }
 
   // 2. Plans & Versions
@@ -114,7 +316,6 @@ export class InsuranceStore {
     const versions = loadFromStorage(STORAGE_KEYS.VERSIONS, MOCK_PLAN_VERSIONS);
 
     // Auto-heal / migration: Ensure each plan has at most ONE 'published' version
-    // If a plan has multiple published versions, retain only the one with the highest version_no
     let modified = false;
     const planVersionsMap = new Map<string, PlanVersion[]>();
     for (const v of versions) {
@@ -126,9 +327,7 @@ export class InsuranceStore {
     for (const [, vList] of planVersionsMap.entries()) {
       const publishedList = vList.filter((v) => v.workflow_status === 'published');
       if (publishedList.length > 1) {
-        // Sort descending by version_no
         publishedList.sort((a, b) => b.version_no - a.version_no);
-        // publishedList[0] stays published; others become archived
         for (let i = 1; i < publishedList.length; i++) {
           publishedList[i].workflow_status = 'archived';
           publishedList[i].updated_at = new Date().toISOString();
@@ -167,7 +366,8 @@ export class InsuranceStore {
         );
         if (!hasAcc) {
           const plan = plans.find((p) => p.id === v.plan_id);
-          const isCovered = !plan || plan.insurance_type === 'ชั้น 1' || plan.insurance_type.includes('2+');
+          const isCovered =
+            !plan || plan.insurance_type === 'ชั้น 1' || plan.insurance_type.includes('2+');
           coverages.push({
             id: `vc-${v.id}-accessories`,
             plan_version_id: v.id,
@@ -213,58 +413,100 @@ export class InsuranceStore {
     return MOCK_COVERAGE_TYPES;
   }
 
+  // Workflow Status Transitions with Full Persistence & Audit Logging (Section 12.2 & 12.3)
+  static submitForReview(versionId: string, reason: string, actorName = 'เจ้าหน้าที่กรอกข้อมูล'): void {
+    const versions = this.getVersions();
+    const version = versions.find((v) => v.id === versionId);
+    if (!version) throw new Error('ไม่พบรุ่นแพ็กเกจที่ระบุ');
+
+    const beforeStatus = version.workflow_status;
+    version.workflow_status = 'in_review';
+    version.updated_at = new Date().toISOString();
+    saveToStorage(STORAGE_KEYS.VERSIONS, versions);
+
+    const auditLogs = this.getAuditLogs();
+    auditLogs.unshift({
+      id: `audit-${Date.now()}`,
+      actor_name: actorName,
+      action: 'submit_review',
+      entity_type: 'plan_version',
+      entity_id: versionId,
+      before_data: { workflow_status: beforeStatus },
+      after_data: { workflow_status: 'in_review' },
+      reason,
+      created_at: new Date().toISOString(),
+    });
+    saveToStorage(STORAGE_KEYS.AUDIT, auditLogs);
+  }
+
+  static publishPlanVersion(versionId: string, reason: string, actorName = 'ผู้ตรวจสอบ'): void {
+    const versions = this.getVersions();
+    const version = versions.find((v) => v.id === versionId);
+    if (!version) throw new Error('ไม่พบรุ่นแพ็กเกจที่ระบุ');
+
+    const docs = this.getDocuments().filter((d) => d.plan_version_id === versionId);
+    if (docs.length === 0) {
+      throw new Error('ไม่สามารถเผยแพร่ได้: ต้องแนบหรือระบุเอกสารอ้างอิงต้นทางอย่างน้อย 1 รายการ (Section 8.4)');
+    }
+
+    const now = new Date().toISOString();
+    const beforeStatus = version.workflow_status;
+    version.workflow_status = 'published';
+    version.verified_at = now;
+    version.updated_at = now;
+
+    // Section 12.3: Archive previous published versions of the same plan atomically
+    for (const other of versions) {
+      if (other.plan_id === version.plan_id && other.id !== version.id && other.workflow_status === 'published') {
+        other.workflow_status = 'archived';
+        other.updated_at = now;
+      }
+    }
+    saveToStorage(STORAGE_KEYS.VERSIONS, versions);
+
+    const auditLogs = this.getAuditLogs();
+    auditLogs.unshift({
+      id: `audit-${Date.now()}`,
+      actor_name: actorName,
+      action: 'publish',
+      entity_type: 'plan_version',
+      entity_id: versionId,
+      before_data: { workflow_status: beforeStatus },
+      after_data: { workflow_status: 'published', verified_at: now },
+      reason,
+      created_at: now,
+    });
+    saveToStorage(STORAGE_KEYS.AUDIT, auditLogs);
+  }
+
+  static rejectPlanVersion(versionId: string, reason: string, actorName = 'ผู้ตรวจสอบ'): void {
+    const versions = this.getVersions();
+    const version = versions.find((v) => v.id === versionId);
+    if (!version) throw new Error('ไม่พบรุ่นแพ็กเกจที่ระบุ');
+
+    const now = new Date().toISOString();
+    const beforeStatus = version.workflow_status;
+    version.workflow_status = 'draft';
+    version.updated_at = now;
+    saveToStorage(STORAGE_KEYS.VERSIONS, versions);
+
+    const auditLogs = this.getAuditLogs();
+    auditLogs.unshift({
+      id: `audit-${Date.now()}`,
+      actor_name: actorName,
+      action: 'reject',
+      entity_type: 'plan_version',
+      entity_id: versionId,
+      before_data: { workflow_status: beforeStatus },
+      after_data: { workflow_status: 'draft' },
+      reason,
+      created_at: now,
+    });
+    saveToStorage(STORAGE_KEYS.AUDIT, auditLogs);
+  }
+
   // Comprehensive Create or Edit Plan
-  static createOrUpdatePlan(payload: {
-    planId?: string;
-    versionId?: string;
-    insurerId: string;
-    name: string;
-    insuranceType: any;
-    workflowStatus?: 'draft' | 'in_review' | 'published';
-    notes?: string;
-    // Eligibility
-    scopeType?: 'all_models' | 'specific_model';
-    vehicleModelId?: string | null;
-    minCarAge?: number;
-    maxCarAge?: number;
-    usageType?: string;
-    inspectionRequired?: boolean;
-    // Price Options (supports multiple tiers for same plan)
-    priceOptions?: {
-      id?: string;
-      label?: string;
-      repairType: 'dealer' | 'garage';
-      priceType?: 'fixed_for_conditions' | 'starting' | 'indicative' | 'unknown';
-      premiumTotal?: number | null;
-      sumInsuredMin?: number | null;
-      sumInsuredMax?: number | null;
-      deductibleAmount?: number;
-      deductibleTerms?: string;
-      driverConditions?: string;
-      compulsoryIncluded?: 'included' | 'excluded' | 'unspecified';
-    }[];
-    priceOptionLabel?: string;
-    repairType?: 'dealer' | 'garage';
-    priceType?: 'fixed_for_conditions' | 'starting' | 'indicative' | 'unknown';
-    premiumTotal?: number | null;
-    sumInsuredMin?: number | null;
-    sumInsuredMax?: number | null;
-    deductibleAmount?: number;
-    deductibleTerms?: string;
-    driverConditions?: string;
-    compulsoryIncluded?: 'included' | 'excluded' | 'unspecified';
-    // Coverages
-    coverages?: {
-      code: string;
-      status: 'covered' | 'not_covered' | 'optional' | 'unknown';
-      limitAmount?: number | null;
-      limitBasis?: string;
-      terms?: string;
-    }[];
-    // Document
-    documentTitle?: string;
-    documentRef?: string;
-  }): { plan: Plan; version: PlanVersion } {
+  static createOrUpdatePlan(payload: CreateOrUpdatePlanPayload): { plan: Plan; version: PlanVersion } {
     const plans = this.getPlans();
     const versions = this.getVersions();
     const rules = this.getEligibilityRules();
@@ -273,7 +515,11 @@ export class InsuranceStore {
     const docs = this.getDocuments();
     const auditLogs = this.getAuditLogs();
 
-    const isEdit = !!payload.planId;
+    const now = new Date().toISOString();
+    const todayStr = getBangkokDateString(0);
+    const nextYearStr = getBangkokDateString(365);
+
+    const isEdit = Boolean(payload.planId);
     const planId = payload.planId || `plan-${Date.now()}`;
     const versionId = payload.versionId || `ver-${Date.now()}`;
     const existingRule = rules.find((r) => r.plan_version_id === versionId);
@@ -282,38 +528,25 @@ export class InsuranceStore {
 
     // 1. Update or Create Plan
     let plan: Plan;
-    if (isEdit) {
-      const pIdx = plans.findIndex((p) => p.id === planId);
-      if (pIdx !== -1) {
-        plans[pIdx] = {
-          ...plans[pIdx],
-          insurer_id: payload.insurerId,
-          name: payload.name,
-          insurance_type: payload.insuranceType,
-          updated_at: new Date().toISOString(),
-        };
-        plan = plans[pIdx];
-      } else {
-        plan = {
-          id: planId,
-          insurer_id: payload.insurerId,
-          name: payload.name,
-          insurance_type: payload.insuranceType,
-          is_archived: false,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-        plans.unshift(plan);
-      }
+    const pIdx = isEdit ? plans.findIndex((p) => p.id === planId) : -1;
+    if (pIdx !== -1) {
+      plans[pIdx] = {
+        ...plans[pIdx],
+        insurer_id: payload.insurerId,
+        name: payload.name.trim(),
+        insurance_type: payload.insuranceType,
+        updated_at: now,
+      };
+      plan = plans[pIdx];
     } else {
       plan = {
         id: planId,
         insurer_id: payload.insurerId,
-        name: payload.name,
+        name: payload.name.trim(),
         insurance_type: payload.insuranceType,
         is_archived: false,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        created_at: now,
+        updated_at: now,
       };
       plans.unshift(plan);
     }
@@ -322,14 +555,24 @@ export class InsuranceStore {
     // 2. Update or Create Version
     let version: PlanVersion;
     const vIdx = versions.findIndex((v) => v.id === versionId);
-    const targetStatus = payload.workflowStatus || 'published';
+    const targetStatus: WorkflowStatus = payload.workflowStatus || 'published';
 
     if (vIdx !== -1) {
       versions[vIdx] = {
         ...versions[vIdx],
         workflow_status: targetStatus,
-        notes: payload.notes || versions[vIdx].notes,
-        updated_at: new Date().toISOString(),
+        effective_from:
+          payload.effectiveFrom !== undefined ? payload.effectiveFrom : versions[vIdx].effective_from,
+        effective_to:
+          payload.effectiveTo !== undefined ? payload.effectiveTo : versions[vIdx].effective_to,
+        review_due_at:
+          payload.reviewDueAt !== undefined ? payload.reviewDueAt : versions[vIdx].review_due_at,
+        verified_at:
+          targetStatus === 'published'
+            ? versions[vIdx].verified_at || now
+            : versions[vIdx].verified_at,
+        notes: payload.notes !== undefined ? payload.notes : versions[vIdx].notes,
+        updated_at: now,
       };
       version = versions[vIdx];
     } else {
@@ -340,13 +583,13 @@ export class InsuranceStore {
         plan_id: planId,
         version_no: maxVerNo + 1,
         workflow_status: targetStatus,
-        effective_from: '2026-01-01',
-        effective_to: '2026-12-31',
-        verified_at: targetStatus === 'published' ? new Date().toISOString() : null,
-        review_due_at: '2026-12-31',
+        effective_from: payload.effectiveFrom ?? todayStr,
+        effective_to: payload.effectiveTo ?? nextYearStr,
+        verified_at: targetStatus === 'published' ? now : null,
+        review_due_at: payload.reviewDueAt ?? getBangkokDateString(335),
         notes: payload.notes || 'บันทึกข้อมูลแพ็กเกจใหม่',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        created_at: now,
+        updated_at: now,
       };
       versions.unshift(version);
     }
@@ -356,7 +599,7 @@ export class InsuranceStore {
       for (const v of versions) {
         if (v.plan_id === planId && v.id !== version.id && v.workflow_status === 'published') {
           v.workflow_status = 'archived';
-          v.updated_at = new Date().toISOString();
+          v.updated_at = now;
         }
       }
     }
@@ -364,109 +607,161 @@ export class InsuranceStore {
     saveToStorage(STORAGE_KEYS.VERSIONS, versions);
 
     // 3. Eligibility Rule
-    // Remove existing rule for this version if editing
     const cleanRules = rules.filter((r) => r.plan_version_id !== versionId);
+    const resolvedScope: ScopeType = payload.scopeType || 'all_models';
     const newRule: EligibilityRule = {
       id: ruleId,
       plan_version_id: versionId,
-      scope_type: payload.scopeType || 'all_models',
-      vehicle_model_id: payload.vehicleModelId || null,
+      scope_type: resolvedScope,
+      vehicle_model_id: resolvedScope === 'specific_model' ? payload.vehicleModelId || null : null,
       min_age: payload.minCarAge ?? 1,
       max_age: payload.maxCarAge ?? 10,
-      age_basis: 'registration_year',
-      usage_type: (payload.usageType as any) || 'private',
+      age_basis: payload.ageBasis !== undefined ? payload.ageBasis : existingRule?.age_basis ?? 'registration_year',
+      usage_type: payload.usageType || 'private',
       inspection_required: payload.inspectionRequired ?? false,
-      notes: payload.scopeType === 'specific_model' ? 'เงื่อนไขเฉพาะรุ่นรถที่ระบุ' : 'รถยนต์ทั่วไปตามเงื่อนไขอายุรถ',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      notes:
+        resolvedScope === 'specific_model'
+          ? 'เงื่อนไขเฉพาะรุ่นรถที่ระบุ'
+          : resolvedScope === 'unknown'
+          ? 'ยังไม่ทราบขอบเขตรุ่นรถ ต้องตรวจสอบเอกสารเพิ่มเติม'
+          : 'รถยนต์ทั่วไปตามเงื่อนไขอายุรถ',
+      created_at: existingRule?.created_at || now,
+      updated_at: now,
     };
     cleanRules.push(newRule);
     saveToStorage(STORAGE_KEYS.RULES, cleanRules);
 
-    // 4. Price Options (supports multiple price options / tiers per package)
-    let cleanOptions = options.filter((o) => o.eligibility_rule_id !== ruleId);
+    // 4. Price Options
+    const cleanOptions = options.filter((o) => o.eligibility_rule_id !== ruleId);
+    const effectiveFromDate = version.effective_from || todayStr;
+    const effectiveToDate = version.effective_to || nextYearStr;
+
     if (payload.priceOptions && payload.priceOptions.length > 0) {
       for (let i = 0; i < payload.priceOptions.length; i++) {
         const po = payload.priceOptions[i];
+        const sumMax = po.sumInsuredMax !== undefined ? po.sumInsuredMax : null;
+        const sumMin = po.sumInsuredMin !== undefined ? po.sumInsuredMin : sumMax;
         cleanOptions.push({
           id: po.id || `opt-${Date.now()}-${i}`,
           eligibility_rule_id: ruleId,
-          label: po.label || `${po.repairType === 'dealer' ? 'ซ่อมห้าง' : 'ซ่อมอู่'} - ทุน ${(po.sumInsuredMax || 0).toLocaleString()} บาท`,
+          label:
+            po.label?.trim() ||
+            `${po.repairType === 'dealer' ? 'ซ่อมห้าง' : 'ซ่อมอู่'} - ${
+              sumMax ? `ทุน ${sumMax.toLocaleString()} บาท` : 'ยังไม่ระบุทุน'
+            }`,
           repair_type: po.repairType,
-          price_type: po.priceType || 'fixed_for_conditions',
+          price_type: po.priceType || (po.premiumTotal != null ? 'fixed_for_conditions' : 'unknown'),
           premium_total: po.premiumTotal ?? null,
-          sum_insured_min: po.sumInsuredMin ?? po.sumInsuredMax ?? 500000,
-          sum_insured_max: po.sumInsuredMax ?? 500000,
+          sum_insured_min: sumMin,
+          sum_insured_max: sumMax,
           deductible_amount: po.deductibleAmount ?? 0,
-          deductible_terms: po.deductibleTerms || (po.deductibleAmount ? `มีค่าเสียหายส่วนแรก ฿${po.deductibleAmount} กรณีเป็นฝ่ายผิด` : null),
-          driver_conditions: po.driverConditions || 'ไม่จำกัดชื่อผู้ขับขี่',
+          deductible_terms:
+            po.deductibleTerms?.trim() ||
+            (po.deductibleAmount ? `มีค่าเสียหายส่วนแรก ฿${po.deductibleAmount.toLocaleString()} กรณีเป็นฝ่ายผิด` : null),
+          driver_conditions: po.driverConditions?.trim() || 'ไม่จำกัดชื่อผู้ขับขี่',
           compulsory_included: po.compulsoryIncluded || 'excluded',
-          valid_from: '2026-01-01',
-          valid_to: '2026-12-31',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+          valid_from: po.validFrom ?? effectiveFromDate,
+          valid_to: po.validTo ?? effectiveToDate,
+          created_at: now,
+          updated_at: now,
         });
       }
     } else {
-      const newOption: PriceOption = {
+      const sumMax = payload.sumInsuredMax !== undefined ? payload.sumInsuredMax : 500000;
+      const sumMin = payload.sumInsuredMin !== undefined ? payload.sumInsuredMin : sumMax;
+      cleanOptions.unshift({
         id: optionId,
         eligibility_rule_id: ruleId,
-        label: payload.priceOptionLabel || `${payload.repairType === 'dealer' ? 'ซ่อมห้าง' : 'ซ่อมอู่'} - ทุน ${payload.sumInsuredMax?.toLocaleString() || 'ตามเงื่อนไข'}`,
+        label:
+          payload.priceOptionLabel?.trim() ||
+          `${payload.repairType === 'dealer' ? 'ซ่อมห้าง' : 'ซ่อมอู่'} - ${
+            sumMax ? `ทุน ${sumMax.toLocaleString()}` : 'ยังไม่ระบุทุน'
+          }`,
         repair_type: payload.repairType || 'garage',
         price_type: payload.priceType || 'fixed_for_conditions',
         premium_total: payload.premiumTotal ?? null,
-        sum_insured_min: payload.sumInsuredMin ?? payload.sumInsuredMax ?? 500000,
-        sum_insured_max: payload.sumInsuredMax ?? 500000,
+        sum_insured_min: sumMin,
+        sum_insured_max: sumMax,
         deductible_amount: payload.deductibleAmount ?? 0,
-        deductible_terms: payload.deductibleTerms || (payload.deductibleAmount ? `มีค่าเสียหายส่วนแรก ฿${payload.deductibleAmount} กรณีเป็นฝ่ายผิด` : null),
+        deductible_terms:
+          payload.deductibleTerms ||
+          (payload.deductibleAmount ? `มีค่าเสียหายส่วนแรก ฿${payload.deductibleAmount.toLocaleString()} กรณีเป็นฝ่ายผิด` : null),
         driver_conditions: payload.driverConditions || 'ไม่จำกัดชื่อผู้ขับขี่',
         compulsory_included: payload.compulsoryIncluded || 'excluded',
-        valid_from: '2026-01-01',
-        valid_to: '2026-12-31',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-      cleanOptions.unshift(newOption);
+        valid_from: effectiveFromDate,
+        valid_to: effectiveToDate,
+        created_at: now,
+        updated_at: now,
+      });
     }
     saveToStorage(STORAGE_KEYS.OPTIONS, cleanOptions);
 
-    // 5. Version Coverages
+    // 5. Version Coverages (Section 9.4: Null limit Basis must stay null, never default to 'ตามทุนประกัน')
+    const prevVersionCoverages = coverages.filter((c) => c.plan_version_id === versionId);
     const cleanCoverages = coverages.filter((c) => c.plan_version_id !== versionId);
     if (payload.coverages && payload.coverages.length > 0) {
       for (const cov of payload.coverages) {
         const type = MOCK_COVERAGE_TYPES.find((t) => t.code === cov.code);
         if (type) {
+          const prevCov = prevVersionCoverages.find((pc) => pc.coverage_type_id === type.id);
           cleanCoverages.push({
-            id: `vc-${Date.now()}-${type.code}`,
+            id: prevCov?.id || `vc-${Date.now()}-${type.code}`,
             plan_version_id: versionId,
             coverage_type_id: type.id,
             status: cov.status,
             limit_amount: cov.limitAmount ?? null,
-            limit_basis: cov.limitBasis || (cov.limitAmount ? 'ต่อครั้ง' : 'ตามทุนประกัน'),
-            deductible_amount: 0,
-            terms: cov.terms || null,
-            exclusions: null,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
+            limit_basis: cov.limitBasis?.trim() ? cov.limitBasis.trim() : null,
+            deductible_amount: prevCov?.deductible_amount ?? 0,
+            terms: cov.terms?.trim() ? cov.terms.trim() : null,
+            exclusions:
+              cov.exclusions !== undefined
+                ? cov.exclusions.trim() || null
+                : prevCov?.exclusions ?? null,
+            created_at: prevCov?.created_at || now,
+            updated_at: now,
           });
         }
       }
     } else {
-      // Default standard coverages based on insurance type
       const isType1 = payload.insuranceType === 'ชั้น 1';
       for (const type of MOCK_COVERAGE_TYPES) {
-        let status: 'covered' | 'not_covered' | 'optional' = 'covered';
+        let status: CoverageStatus = 'covered';
         let limitAmount: number | null = null;
-        let limitBasis = 'ตามทุนประกัน';
+        let limitBasis: string | null = null;
 
         if (type.code === 'flood' || type.code === 'theft_fire' || type.code === 'own_damage') {
-          status = isType1 ? 'covered' : (payload.insuranceType.includes('2+') ? 'covered' : 'not_covered');
+          status = isType1 || payload.insuranceType.includes('2+') ? 'covered' : 'not_covered';
+          if (status === 'covered') limitBasis = 'ตามทุนประกัน';
+        } else if (type.code === 'windshield') {
+          status = isType1 ? 'covered' : 'not_covered';
+          if (status === 'covered') limitBasis = 'ตามทุนประกัน';
+        } else if (type.code === 'theft_personal_prop') {
+          status = isType1 ? 'optional' : 'not_covered';
+          if (status === 'optional') {
+            limitAmount = 20000;
+            limitBasis = 'ต่อครั้ง';
+          }
         } else if (type.code === 'tp_life_person') {
           limitAmount = 1000000;
           limitBasis = 'ต่อคน';
+        } else if (type.code === 'tp_life_event') {
+          limitAmount = 10000000;
+          limitBasis = 'ต่อครั้ง';
         } else if (type.code === 'tp_property') {
           limitAmount = 2500000;
           limitBasis = 'ต่อครั้ง';
+        } else if (type.code === 'pa_driver_passenger' || type.code === 'medical_expenses') {
+          limitAmount = 200000;
+          limitBasis = 'ต่อคน';
+        } else if (type.code === 'bail_bond') {
+          limitAmount = 300000;
+          limitBasis = 'ต่อครั้ง';
+        } else if (type.code === 'roadside_assist') {
+          status = isType1 ? 'covered' : 'optional';
+          limitBasis = '24 ชม.';
+        } else if (type.code === 'towing') {
+          status = isType1 ? 'covered' : 'optional';
+          limitBasis = 'ตามเงื่อนไขบริษัท';
         } else if (type.code === 'loss_of_use') {
           status = 'optional';
           limitBasis = 'ซื้อความคุ้มครองเสริม';
@@ -486,52 +781,158 @@ export class InsuranceStore {
           deductible_amount: 0,
           terms: null,
           exclusions: null,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+          created_at: now,
+          updated_at: now,
         });
       }
     }
     saveToStorage(STORAGE_KEYS.COVERAGES, cleanCoverages);
 
-    // 6. Source Document if provided
-    if (payload.documentTitle) {
-      docs.unshift({
-        id: `doc-${Date.now()}`,
-        plan_version_id: versionId,
-        source_type: 'rate_sheet',
-        storage_path: `documents/${planId}/spec_sheet.pdf`,
-        source_url: null,
-        title: payload.documentTitle,
-        file_size: 1048576,
-        mime_type: 'application/pdf',
-        page_reference: payload.documentRef || 'หน้า 1 ตารางอัตราเบี้ย',
-        received_at: new Date().toISOString().slice(0, 10),
-        created_at: new Date().toISOString(),
-        created_by: null,
-      });
+    // 6. Source Document (Update existing document for this version rather than duplicating)
+    if (payload.documentTitle && payload.documentTitle.trim()) {
+      const existingDocIdx = docs.findIndex((d) => d.plan_version_id === versionId);
+      if (existingDocIdx !== -1) {
+        docs[existingDocIdx] = {
+          ...docs[existingDocIdx],
+          source_type: payload.sourceType || docs[existingDocIdx].source_type || 'rate_sheet',
+          title: payload.documentTitle.trim(),
+          page_reference: payload.documentRef?.trim() || docs[existingDocIdx].page_reference,
+        };
+      } else {
+        docs.unshift({
+          id: `doc-${Date.now()}`,
+          plan_version_id: versionId,
+          source_type: payload.sourceType || 'rate_sheet',
+          storage_path: `documents/${planId}/${versionId}.pdf`,
+          source_url: null,
+          title: payload.documentTitle.trim(),
+          file_size: 1048576,
+          mime_type: 'application/pdf',
+          page_reference: payload.documentRef?.trim() || 'หน้า 1 ตารางอัตราเบี้ย',
+          received_at: todayStr,
+          created_at: now,
+          created_by: null,
+        });
+      }
       saveToStorage(STORAGE_KEYS.DOCUMENTS, docs);
     }
 
     // 7. Audit Log
     auditLogs.unshift({
       id: `audit-${Date.now()}`,
-      actor_name: 'ผู้ใช้งาน',
+      actor_name: payload.actorName || 'ผู้ใช้งาน',
       action: isEdit ? 'update' : 'create',
       entity_type: 'plan_version',
       entity_id: versionId,
-      before_data: isEdit ? { action: 'edit' } : null,
-      after_data: { plan_name: payload.name, status: payload.workflowStatus || 'published' },
-      reason: isEdit ? 'แก้ไขข้อมูลแพ็กเกจและเงื่อนไข' : 'สร้างข้อมูลแพ็กเกจและเผยแพร่',
-      created_at: new Date().toISOString(),
+      before_data: isEdit ? { plan_id: planId } : null,
+      after_data: { plan_name: plan.name, version_no: version.version_no, status: targetStatus },
+      reason: isEdit
+        ? `บันทึกการแก้ไขข้อมูลแพ็กเกจ "${plan.name}" (รุ่นที่ ${version.version_no})`
+        : `สร้างแพ็กเกจใหม่ "${plan.name}" (สถานะ: ${targetStatus})`,
+      created_at: now,
     });
     saveToStorage(STORAGE_KEYS.AUDIT, auditLogs);
 
     return { plan, version };
   }
 
-  // Delete Plan
-  static deletePlan(planId: string): void {
-    const plans = this.getPlans().filter((p) => p.id !== planId);
+  /**
+   * Section 8.1: Published plans must be archived rather than hard-deleted.
+   * Unpublished draft-only plans can be deleted along with all child records.
+   */
+  static deletePlan(planId: string, actorName = 'ผู้ใช้งาน'): { mode: 'archived' | 'deleted' } {
+    const plans = this.getPlans();
+    const targetPlan = plans.find((p) => p.id === planId);
+    if (!targetPlan) return { mode: 'deleted' };
+
+    const versions = this.getVersions();
+    const planVersions = versions.filter((v) => v.plan_id === planId);
+    const hasPublishedHistory = planVersions.some(
+      (v) => v.workflow_status === 'published' || v.workflow_status === 'archived'
+    );
+    const auditLogs = this.getAuditLogs();
+    const now = new Date().toISOString();
+
+    if (hasPublishedHistory) {
+      targetPlan.is_archived = true;
+      targetPlan.updated_at = now;
+      saveToStorage(STORAGE_KEYS.PLANS, plans);
+
+      auditLogs.unshift({
+        id: `audit-${Date.now()}`,
+        actor_name: actorName,
+        action: 'archive',
+        entity_type: 'plan',
+        entity_id: planId,
+        before_data: { is_archived: false },
+        after_data: { is_archived: true },
+        reason: `จัดเก็บแพ็กเกจ "${targetPlan.name}" เข้ากรุ (Archive) เพื่อรักษาประวัติรุ่นที่เคยเผยแพร่`,
+        created_at: now,
+      });
+      saveToStorage(STORAGE_KEYS.AUDIT, auditLogs);
+      return { mode: 'archived' };
+    }
+
+    // Draft-only plan: cascade clean all child records cleanly
+    const versionIds = new Set(planVersions.map((v) => v.id));
+    const rules = this.getEligibilityRules();
+    const ruleIds = new Set(rules.filter((r) => versionIds.has(r.plan_version_id)).map((r) => r.id));
+    const options = this.getPriceOptions();
+    const optionIds = new Set(options.filter((o) => ruleIds.has(o.eligibility_rule_id)).map((o) => o.id));
+
+    saveToStorage(STORAGE_KEYS.PLANS, plans.filter((p) => p.id !== planId));
+    saveToStorage(STORAGE_KEYS.VERSIONS, versions.filter((v) => !versionIds.has(v.id)));
+    saveToStorage(STORAGE_KEYS.RULES, rules.filter((r) => !versionIds.has(r.plan_version_id)));
+    saveToStorage(STORAGE_KEYS.OPTIONS, options.filter((o) => !ruleIds.has(o.eligibility_rule_id)));
+    saveToStorage(
+      STORAGE_KEYS.COVERAGES,
+      this.getVersionCoverages().filter((c) => !versionIds.has(c.plan_version_id))
+    );
+    saveToStorage(
+      STORAGE_KEYS.OVERRIDES,
+      this.getOverrides().filter((ov) => !optionIds.has(ov.price_option_id))
+    );
+    saveToStorage(
+      STORAGE_KEYS.DOCUMENTS,
+      this.getDocuments().filter((d) => !versionIds.has(d.plan_version_id))
+    );
+
+    auditLogs.unshift({
+      id: `audit-${Date.now()}`,
+      actor_name: actorName,
+      action: 'delete',
+      entity_type: 'plan',
+      entity_id: planId,
+      before_data: { name: targetPlan.name },
+      after_data: null,
+      reason: `ลบแพ็กเกจร่าง "${targetPlan.name}" ที่ยังไม่เคยเผยแพร่`,
+      created_at: now,
+    });
+    saveToStorage(STORAGE_KEYS.AUDIT, auditLogs);
+    return { mode: 'deleted' };
+  }
+
+  static restorePlan(planId: string, actorName = 'ผู้ดูแลระบบ'): void {
+    const plans = this.getPlans();
+    const targetPlan = plans.find((p) => p.id === planId);
+    if (!targetPlan) return;
+
+    targetPlan.is_archived = false;
+    targetPlan.updated_at = new Date().toISOString();
     saveToStorage(STORAGE_KEYS.PLANS, plans);
+
+    const auditLogs = this.getAuditLogs();
+    auditLogs.unshift({
+      id: `audit-${Date.now()}`,
+      actor_name: actorName,
+      action: 'restore',
+      entity_type: 'plan',
+      entity_id: planId,
+      before_data: { is_archived: true },
+      after_data: { is_archived: false },
+      reason: `กู้คืนแพ็กเกจ "${targetPlan.name}" กลับมาใช้งาน`,
+      created_at: new Date().toISOString(),
+    });
+    saveToStorage(STORAGE_KEYS.AUDIT, auditLogs);
   }
 }

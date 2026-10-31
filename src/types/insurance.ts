@@ -1,6 +1,5 @@
 import {
   CoverageStatus,
-  CoverageType,
   CompulsoryInclusion,
   InsuranceType,
   PriceType,
@@ -55,6 +54,8 @@ export interface InsuranceSearchResultItem {
   planVersionId: string;
   versionNo: number;
   workflowStatus: WorkflowStatus;
+  versionEffectiveFrom?: string | null;
+  versionEffectiveTo?: string | null;
   verifiedAt?: string | null;
   reviewDueAt?: string | null;
 
@@ -67,6 +68,7 @@ export interface InsuranceSearchResultItem {
   vehicleVariant?: string | null;
   minCarAge?: number | null;
   maxCarAge?: number | null;
+  ageBasis?: 'registration_year' | 'manufacture_year' | null;
   usageType?: string | null;
   inspectionRequired?: boolean | null;
 

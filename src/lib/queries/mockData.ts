@@ -56,11 +56,11 @@ export const MOCK_PLANS: Plan[] = [
 ];
 
 export const MOCK_PLAN_VERSIONS: PlanVersion[] = [
-  { id: '50000000-0000-0000-0000-000000000001', plan_id: '40000000-0000-0000-0000-000000000001', version_no: 1, workflow_status: 'published', effective_from: '2026-01-01', effective_to: '2026-12-31', verified_at: '2026-01-05T10:00:00+07:00', review_due_at: '2026-11-30', notes: 'อัตราเบี้ยปี 2569 ได้รับการอนุมัติแล้ว', created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-05T10:00:00Z' },
-  { id: '50000000-0000-0000-0000-000000000002', plan_id: '40000000-0000-0000-0000-000000000002', version_no: 1, workflow_status: 'published', effective_from: '2026-01-01', effective_to: '2026-12-31', verified_at: '2026-01-10T14:00:00+07:00', review_due_at: '2026-12-01', notes: 'แผน 2+ ซ่อมอู่/ห้างสำหรับรถเก๋งกระบะทั่วไป', created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-10T14:00:00Z' },
-  { id: '50000000-0000-0000-0000-000000000003', plan_id: '40000000-0000-0000-0000-000000000003', version_no: 1, workflow_status: 'published', effective_from: '2026-02-01', effective_to: '2026-12-31', verified_at: '2026-02-03T11:30:00+07:00', review_due_at: '2026-11-15', notes: 'ไม่มีค่าเสียหายส่วนแรกกรณีรถชนรถ', created_at: '2026-02-01T00:00:00Z', updated_at: '2026-02-03T11:30:00Z' },
-  { id: '50000000-0000-0000-0000-000000000004', plan_id: '40000000-0000-0000-0000-000000000004', version_no: 1, workflow_status: 'published', effective_from: '2026-03-01', effective_to: '2026-12-31', verified_at: '2026-03-05T09:15:00+07:00', review_due_at: '2026-12-31', notes: 'ครอบคลุมแบตเตอรี่แรงดันสูงและแท่นชาร์จติดผนัง', created_at: '2026-03-01T00:00:00Z', updated_at: '2026-03-05T09:15:00Z' },
-  { id: '50000000-0000-0000-0000-000000000005', plan_id: '40000000-0000-0000-0000-000000000005', version_no: 1, workflow_status: 'in_review', effective_from: '2026-04-01', effective_to: '2026-12-31', verified_at: null, review_due_at: '2026-12-15', notes: 'รอตรวจสอบตารางอัตราเบี้ยกับเอกสารทางการ', created_at: '2026-04-01T00:00:00Z', updated_at: '2026-04-01T00:00:00Z' },
+  { id: '50000000-0000-0000-0000-000000000001', plan_id: '40000000-0000-0000-0000-000000000001', version_no: 1, workflow_status: 'published', effective_from: '2026-01-01', effective_to: '2027-12-31', verified_at: '2026-01-05T10:00:00+07:00', review_due_at: '2027-11-30', notes: 'อัตราเบี้ยปี 2569-2570 ได้รับการอนุมัติแล้ว', created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-05T10:00:00Z' },
+  { id: '50000000-0000-0000-0000-000000000002', plan_id: '40000000-0000-0000-0000-000000000002', version_no: 1, workflow_status: 'published', effective_from: '2026-01-01', effective_to: '2027-12-31', verified_at: '2026-01-10T14:00:00+07:00', review_due_at: '2027-12-01', notes: 'แผน 2+ ซ่อมอู่/ห้างสำหรับรถเก๋งกระบะทั่วไป', created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-10T14:00:00Z' },
+  { id: '50000000-0000-0000-0000-000000000003', plan_id: '40000000-0000-0000-0000-000000000003', version_no: 1, workflow_status: 'published', effective_from: '2026-02-01', effective_to: '2027-12-31', verified_at: '2026-02-03T11:30:00+07:00', review_due_at: '2027-11-15', notes: 'ไม่มีค่าเสียหายส่วนแรกกรณีรถชนรถ', created_at: '2026-02-01T00:00:00Z', updated_at: '2026-02-03T11:30:00Z' },
+  { id: '50000000-0000-0000-0000-000000000004', plan_id: '40000000-0000-0000-0000-000000000004', version_no: 1, workflow_status: 'published', effective_from: '2026-03-01', effective_to: '2027-12-31', verified_at: '2026-03-05T09:15:00+07:00', review_due_at: '2027-12-31', notes: 'ครอบคลุมแบตเตอรี่แรงดันสูงและแท่นชาร์จติดผนัง', created_at: '2026-03-01T00:00:00Z', updated_at: '2026-03-05T09:15:00Z' },
+  { id: '50000000-0000-0000-0000-000000000005', plan_id: '40000000-0000-0000-0000-000000000005', version_no: 1, workflow_status: 'in_review', effective_from: '2026-04-01', effective_to: '2027-12-31', verified_at: null, review_due_at: '2027-12-15', notes: 'รอตรวจสอบตารางอัตราเบี้ยกับเอกสารทางการ', created_at: '2026-04-01T00:00:00Z', updated_at: '2026-04-01T00:00:00Z' },
 ];
 
 export const MOCK_ELIGIBILITY_RULES: EligibilityRule[] = [
@@ -68,6 +68,7 @@ export const MOCK_ELIGIBILITY_RULES: EligibilityRule[] = [
   { id: '60000000-0000-0000-0000-000000000002', plan_version_id: '50000000-0000-0000-0000-000000000002', scope_type: 'all_models', vehicle_model_id: null, min_age: 1, max_age: 15, age_basis: 'registration_year', usage_type: 'private', inspection_required: false, notes: 'ไม่ตรวจสภาพรถ รับรถกลุ่ม 3, 4, 5', created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
   { id: '60000000-0000-0000-0000-000000000003', plan_version_id: '50000000-0000-0000-0000-000000000003', scope_type: 'all_models', vehicle_model_id: null, min_age: 2, max_age: 20, age_basis: 'registration_year', usage_type: 'private', inspection_required: false, notes: 'รถเก๋ง/กระบะ ไม่ต้องตรวจสภาพ', created_at: '2026-02-01T00:00:00Z', updated_at: '2026-02-01T00:00:00Z' },
   { id: '60000000-0000-0000-0000-000000000004', plan_version_id: '50000000-0000-0000-0000-000000000004', scope_type: 'specific_model', vehicle_model_id: '30000000-0000-0000-0000-000000000005', min_age: 1, max_age: 5, age_basis: 'registration_year', usage_type: 'private', inspection_required: true, notes: 'เฉพาะ BYD ATTO 3 จดทะเบียนส่วนบุคคล ตรวจสภาพรถก่อนทำประกัน', created_at: '2026-03-01T00:00:00Z', updated_at: '2026-03-01T00:00:00Z' },
+  { id: '60000000-0000-0000-0000-000000000005', plan_version_id: '50000000-0000-0000-0000-000000000005', scope_type: 'all_models', vehicle_model_id: null, min_age: 1, max_age: 25, age_basis: 'registration_year', usage_type: 'private', inspection_required: false, notes: 'รถเก๋งและกระบะใช้งานส่วนบุคคล ไม่ต้องตรวจสภาพรถ', created_at: '2026-04-01T00:00:00Z', updated_at: '2026-04-01T00:00:00Z' },
 ];
 
 export const MOCK_PRICE_OPTIONS: PriceOption[] = [
@@ -87,7 +88,7 @@ export const MOCK_PRICE_OPTIONS: PriceOption[] = [
     deductible_terms: 'ไม่มีค่าเสียหายส่วนแรกกรณีเป็นฝ่ายถูกหรือชนกับยานพาหนะทางบก',
     driver_conditions: 'ไม่จำกัดชื่อผู้ขับขี่',
     valid_from: '2026-01-01',
-    valid_to: '2026-12-31',
+    valid_to: '2027-12-31',
     created_at: '2026-01-01T00:00:00Z',
     updated_at: '2026-01-01T00:00:00Z'
   },
@@ -107,7 +108,7 @@ export const MOCK_PRICE_OPTIONS: PriceOption[] = [
     deductible_terms: 'ไม่มีค่าเสียหายส่วนแรกกรณีชนรถ',
     driver_conditions: 'ไม่จำกัดชื่อผู้ขับขี่',
     valid_from: '2026-01-01',
-    valid_to: '2026-12-31',
+    valid_to: '2027-12-31',
     created_at: '2026-01-01T00:00:00Z',
     updated_at: '2026-01-01T00:00:00Z'
   },
@@ -127,7 +128,7 @@ export const MOCK_PRICE_OPTIONS: PriceOption[] = [
     deductible_terms: 'จ่ายค่าเสียหายส่วนแรก 3,000 บาทเมื่อเกิดอุบัติเหตุที่เป็นฝ่ายผิดหรือไม่ทราบคู่กรณี',
     driver_conditions: 'ไม่จำกัดชื่อผู้ขับขี่',
     valid_from: '2026-01-01',
-    valid_to: '2026-12-31',
+    valid_to: '2027-12-31',
     created_at: '2026-01-01T00:00:00Z',
     updated_at: '2026-01-01T00:00:00Z'
   },
@@ -147,7 +148,7 @@ export const MOCK_PRICE_OPTIONS: PriceOption[] = [
     deductible_terms: 'ไม่มีค่าเสียหายส่วนแรกกรณีชนยานพาหนะทางบก',
     driver_conditions: null,
     valid_from: '2026-01-01',
-    valid_to: '2026-12-31',
+    valid_to: '2027-12-31',
     created_at: '2026-01-01T00:00:00Z',
     updated_at: '2026-01-01T00:00:00Z'
   },
@@ -167,7 +168,7 @@ export const MOCK_PRICE_OPTIONS: PriceOption[] = [
     deductible_terms: null,
     driver_conditions: null,
     valid_from: '2026-02-01',
-    valid_to: '2026-12-31',
+    valid_to: '2027-12-31',
     created_at: '2026-02-01T00:00:00Z',
     updated_at: '2026-02-01T00:00:00Z'
   },
@@ -187,9 +188,29 @@ export const MOCK_PRICE_OPTIONS: PriceOption[] = [
     deductible_terms: null,
     driver_conditions: 'ระบุผู้ขับขี่อายุ 30 ปีขึ้นไป',
     valid_from: '2026-03-01',
-    valid_to: '2026-12-31',
+    valid_to: '2027-12-31',
     created_at: '2026-03-01T00:00:00Z',
     updated_at: '2026-03-01T00:00:00Z'
+  },
+  {
+    id: '70000000-0000-0000-0000-000000000007',
+    eligibility_rule_id: '60000000-0000-0000-0000-000000000005',
+    label: 'ยิ้มได้ 3+ ซ่อมอู่ในเครือ ทุน 100,000 บาท',
+    repair_type: 'garage',
+    price_type: 'fixed_for_conditions',
+    net_premium: 5500,
+    tax_stamp: 400,
+    premium_total: 5900,
+    compulsory_included: 'excluded',
+    sum_insured_min: 100000,
+    sum_insured_max: 100000,
+    deductible_amount: 0,
+    deductible_terms: 'ไม่มีค่าเสียหายส่วนแรกกรณีชนยานพาหนะทางบก',
+    driver_conditions: 'ไม่จำกัดชื่อผู้ขับขี่',
+    valid_from: '2026-04-01',
+    valid_to: '2027-12-31',
+    created_at: '2026-04-01T00:00:00Z',
+    updated_at: '2026-04-01T00:00:00Z'
   },
 ];
 
@@ -233,6 +254,14 @@ export const MOCK_VERSION_COVERAGES: VersionCoverage[] = [
   { id: 'vc-43', plan_version_id: '50000000-0000-0000-0000-000000000004', coverage_type_id: '10000000-0000-0000-0000-000000000008', status: 'covered', limit_amount: 5000000, limit_basis: 'ต่อครั้ง', deductible_amount: 0, terms: null, exclusions: null, created_at: '', updated_at: '' },
   { id: 'vc-44', plan_version_id: '50000000-0000-0000-0000-000000000004', coverage_type_id: '10000000-0000-0000-0000-000000000012', status: 'covered', limit_amount: null, limit_basis: 'พิเศษ บริการชาร์จไฟฉุกเฉินนอกสถานที่', deductible_amount: 0, terms: 'มี Mobile EV Charging unit', exclusions: null, created_at: '', updated_at: '' },
   { id: 'vc-45', plan_version_id: '50000000-0000-0000-0000-000000000004', coverage_type_id: '10000000-0000-0000-0000-000000000015', status: 'covered', limit_amount: 50000, limit_basis: 'ต่อครั้ง (รวมอุปกรณ์ชาร์จ EV)', deductible_amount: 0, terms: 'คุ้มครองอุปกรณ์ตกแต่งและสายชาร์จติดรถ', exclusions: null, created_at: '', updated_at: '' },
+
+  // Plan 5 Coverages (3+ Muang Thai in_review)
+  { id: 'vc-50', plan_version_id: '50000000-0000-0000-0000-000000000005', coverage_type_id: '10000000-0000-0000-0000-000000000001', status: 'covered', limit_amount: null, limit_basis: 'ตามทุนประกัน (ชนยานพาหนะทางบก)', deductible_amount: 0, terms: 'ต้องมีคู่กรณีเป็นยานพาหนะทางบก', exclusions: null, created_at: '', updated_at: '' },
+  { id: 'vc-51', plan_version_id: '50000000-0000-0000-0000-000000000005', coverage_type_id: '10000000-0000-0000-0000-000000000002', status: 'not_covered', limit_amount: null, limit_basis: null, deductible_amount: 0, terms: null, exclusions: null, created_at: '', updated_at: '' },
+  { id: 'vc-52', plan_version_id: '50000000-0000-0000-0000-000000000005', coverage_type_id: '10000000-0000-0000-0000-000000000003', status: 'not_covered', limit_amount: null, limit_basis: null, deductible_amount: 0, terms: null, exclusions: null, created_at: '', updated_at: '' },
+  { id: 'vc-53', plan_version_id: '50000000-0000-0000-0000-000000000005', coverage_type_id: '10000000-0000-0000-0000-000000000006', status: 'covered', limit_amount: 500000, limit_basis: 'ต่อคน', deductible_amount: 0, terms: null, exclusions: null, created_at: '', updated_at: '' },
+  { id: 'vc-54', plan_version_id: '50000000-0000-0000-0000-000000000005', coverage_type_id: '10000000-0000-0000-0000-000000000007', status: 'covered', limit_amount: 10000000, limit_basis: 'ต่อครั้ง', deductible_amount: 0, terms: null, exclusions: null, created_at: '', updated_at: '' },
+  { id: 'vc-55', plan_version_id: '50000000-0000-0000-0000-000000000005', coverage_type_id: '10000000-0000-0000-0000-000000000008', status: 'covered', limit_amount: 1000000, limit_basis: 'ต่อครั้ง', deductible_amount: 0, terms: null, exclusions: null, created_at: '', updated_at: '' },
 ];
 
 export const MOCK_OPTION_COVERAGE_OVERRIDES: OptionCoverageOverride[] = [
@@ -293,6 +322,34 @@ export const MOCK_SOURCE_DOCUMENTS: SourceDocument[] = [
     page_reference: 'หน้า 1 ข้อกำหนดแบตเตอรี่',
     received_at: '2026-03-01',
     created_at: '2026-03-01T00:00:00Z',
+    created_by: null,
+  },
+  {
+    id: '80000000-0000-0000-0000-000000000004',
+    plan_version_id: '50000000-0000-0000-0000-000000000003',
+    source_type: 'rate_sheet',
+    storage_path: 'documents/thanachart/2plus_fit_rates.pdf',
+    source_url: null,
+    title: 'ตารางอัตราเบี้ยธนชาต 2+ ฟิต อุ่นใจ',
+    file_size: 980000,
+    mime_type: 'application/pdf',
+    page_reference: 'หน้า 1 ตารางเบี้ยซ่อมอู่',
+    received_at: '2026-02-01',
+    created_at: '2026-02-01T00:00:00Z',
+    created_by: null,
+  },
+  {
+    id: '80000000-0000-0000-0000-000000000005',
+    plan_version_id: '50000000-0000-0000-0000-000000000005',
+    source_type: 'brochure',
+    storage_path: 'documents/mti/smile_3plus_brochure.pdf',
+    source_url: null,
+    title: 'โบรชัวร์เมืองไทย ยิ้มได้ 3+ เซฟเงินในกระเป๋า',
+    file_size: 760000,
+    mime_type: 'application/pdf',
+    page_reference: 'หน้า 1 ตารางความคุ้มครอง 3+',
+    received_at: '2026-04-01',
+    created_at: '2026-04-01T00:00:00Z',
     created_by: null,
   },
 ];

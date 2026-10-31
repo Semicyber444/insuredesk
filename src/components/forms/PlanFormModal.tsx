@@ -1,22 +1,36 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Insurer, VehicleModel, InsuranceType, RepairType, PriceType, CoverageStatus } from '@/types/database';
-import { InsuranceStore } from '@/lib/store/insuranceStore';
+import { useState } from 'react';
+import {
+  Insurer,
+  VehicleModel,
+  InsuranceType,
+  RepairType,
+  PriceType,
+  CoverageStatus,
+  WorkflowStatus,
+  ScopeType,
+  SourceType,
+  CompulsoryInclusion,
+} from '@/types/database';
+import { InsuranceStore, getBangkokDateString } from '@/lib/store/insuranceStore';
 import { MOCK_COVERAGE_TYPES } from '@/lib/queries/mockData';
+import { useAuth } from '@/lib/auth/AuthContext';
+import {
+  PlanSchema,
+  PlanVersionSchema,
+  EligibilityRuleSchema,
+  PriceOptionSchema,
+} from '@/lib/validation/schemas';
 import {
   X,
   Save,
   AlertCircle,
   Plus,
-  FileText,
-  Check,
   Sparkles,
   Layers,
   Copy,
   Trash2,
-  HelpCircle,
-  DollarSign
 } from 'lucide-react';
 
 interface CoverageItemState {
@@ -24,9 +38,10 @@ interface CoverageItemState {
   name: string;
   category: string;
   status: CoverageStatus;
-  limitAmount?: number | string;
-  limitBasis?: string;
-  terms?: string;
+  limitAmount: number | string;
+  limitBasis: string;
+  terms: string;
+  exclusions: string;
 }
 
 export interface PriceOptionItemState {
@@ -35,328 +50,418 @@ export interface PriceOptionItemState {
   repairType: RepairType;
   priceType: PriceType;
   hasPrice: boolean;
-  premiumTotal?: number | string;
+  premiumTotal: number | string;
+  hasSumInsured: boolean;
   sumInsuredMax: number | string;
   deductibleAmount: number | string;
-  deductibleTerms?: string;
-  compulsoryIncluded: 'included' | 'excluded' | 'unspecified';
-  driverConditions?: string;
+  deductibleTerms: string;
+  compulsoryIncluded: CompulsoryInclusion;
+  driverConditions: string;
+}
+
+export interface EditablePlanInput {
+  id: string;
+  insurer_id: string;
+  name: string;
+  insurance_type: InsuranceType;
+  currentStatus?: WorkflowStatus;
 }
 
 interface PlanFormModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSaved: () => void;
-  initialPlan?: any;
+  initialPlan?: EditablePlanInput | null;
 }
 
-export function PlanFormModal({
-  isOpen,
+type ModalTabId = 'info' | 'vehicle' | 'price' | 'coverages' | 'document';
+
+function buildCoveragePreset(type: InsuranceType): CoverageItemState[] {
+  const isType1 = type === 'ชั้น 1';
+  const is2Plus = type === 'ชั้น 2+';
+  const is3Plus = type === 'ชั้น 3+';
+  const isType2 = type === 'ชั้น 2';
+
+  return MOCK_COVERAGE_TYPES.map((ct) => {
+    let status: CoverageStatus = 'covered';
+    let limitAmount: number | string = '';
+    let limitBasis = '';
+    let terms = '';
+    const exclusions = '';
+
+    if (ct.code === 'own_damage') {
+      if (isType1) {
+        status = 'covered';
+        limitBasis = 'ตามทุนประกัน';
+        terms = 'คุ้มครองอุบัติเหตุทุกกรณี';
+      } else if (is2Plus || is3Plus) {
+        status = 'covered';
+        limitBasis = 'ตามทุนประกัน (ชนกับยานพาหนะทางบก)';
+        terms = 'ต้องมีคู่กรณีเป็นยานพาหนะทางบก';
+      } else {
+        status = 'not_covered';
+      }
+    } else if (ct.code === 'theft_fire') {
+      if (isType1 || is2Plus || isType2) {
+        status = 'covered';
+        limitBasis = 'ตามทุนประกัน';
+      } else {
+        status = 'not_covered';
+      }
+    } else if (ct.code === 'flood') {
+      if (isType1 || is2Plus) {
+        status = 'covered';
+        limitBasis = 'ตามทุนประกัน';
+      } else {
+        status = 'not_covered';
+      }
+    } else if (ct.code === 'windshield') {
+      status = isType1 ? 'covered' : 'not_covered';
+      if (status === 'covered') limitBasis = 'ตามทุนประกัน';
+    } else if (ct.code === 'theft_personal_prop') {
+      status = isType1 ? 'optional' : 'not_covered';
+      if (status === 'optional') {
+        limitAmount = 20000;
+        limitBasis = 'ต่อครั้ง';
+      }
+    } else if (ct.code === 'accessories') {
+      status = isType1 || is2Plus ? 'covered' : 'optional';
+      limitAmount = 20000;
+      limitBasis = 'ต่อครั้ง (ตามที่แจ้งไว้)';
+      terms = 'คุ้มครองอุปกรณ์ตกแต่งตามที่แจ้งไว้ไม่เกิน 20,000 บาท';
+    } else if (ct.code === 'tp_life_person') {
+      status = 'covered';
+      limitAmount = 1000000;
+      limitBasis = 'ต่อคน';
+    } else if (ct.code === 'tp_life_event') {
+      status = 'covered';
+      limitAmount = 10000000;
+      limitBasis = 'ต่อครั้ง';
+    } else if (ct.code === 'tp_property') {
+      status = 'covered';
+      limitAmount = isType1 ? 2500000 : 1000000;
+      limitBasis = 'ต่อครั้ง';
+    } else if (ct.code === 'pa_driver_passenger') {
+      status = 'covered';
+      limitAmount = 200000;
+      limitBasis = 'ต่อคน (5 ที่นั่ง)';
+    } else if (ct.code === 'medical_expenses') {
+      status = 'covered';
+      limitAmount = 200000;
+      limitBasis = 'ต่อคน';
+    } else if (ct.code === 'bail_bond') {
+      status = 'covered';
+      limitAmount = 300000;
+      limitBasis = 'ต่อครั้ง';
+    } else if (ct.code === 'roadside_assist') {
+      status = isType1 || is2Plus ? 'covered' : 'optional';
+      limitBasis = 'ช่วยเหลือ 24 ชม.';
+    } else if (ct.code === 'towing') {
+      status = isType1 || is2Plus ? 'covered' : 'optional';
+      limitAmount = 1500;
+      limitBasis = 'ไม่เกิน 50 กม.';
+    } else if (ct.code === 'loss_of_use') {
+      status = 'optional';
+      limitAmount = 500;
+      limitBasis = 'ต่อวัน';
+      terms = 'ซื้อความคุ้มครองเสริม';
+    }
+
+    return {
+      code: ct.code,
+      name: ct.name,
+      category: ct.category,
+      status,
+      limitAmount,
+      limitBasis,
+      terms,
+      exclusions,
+    };
+  });
+}
+
+function isAutoGeneratedLabel(label: string): boolean {
+  const trimmed = label.trim();
+  return trimmed === '' || /^(ซ่อมห้าง|ซ่อมอู่)\s*-\s*(ทุน|ยังไม่ระบุทุน)/.test(trimmed);
+}
+
+function formatAutoLabel(repairType: RepairType, hasSumInsured: boolean, sumInsuredMax: number | string): string {
+  const prefix = repairType === 'dealer' ? 'ซ่อมห้าง' : 'ซ่อมอู่';
+  if (!hasSumInsured || sumInsuredMax === '' || Number(sumInsuredMax) <= 0) {
+    return `${prefix} - ยังไม่ระบุทุน`;
+  }
+  return `${prefix} - ทุน ${Number(sumInsuredMax).toLocaleString('th-TH')}`;
+}
+
+function buildInitialModalState(initialPlan: EditablePlanInput | null | undefined, canPublish: boolean) {
+  const insList = InsuranceStore.getInsurers();
+  const vehList = InsuranceStore.getVehicleModels();
+  const defaultEffectiveFrom = getBangkokDateString(0);
+  const defaultEffectiveTo = getBangkokDateString(365);
+
+  const defaultTier: PriceOptionItemState = {
+    label: 'ซ่อมอู่ - ทุน 50,000',
+    repairType: 'garage',
+    priceType: 'fixed_for_conditions',
+    hasPrice: true,
+    premiumTotal: 5400,
+    hasSumInsured: true,
+    sumInsuredMax: 50000,
+    deductibleAmount: 0,
+    deductibleTerms: '',
+    compulsoryIncluded: 'excluded',
+    driverConditions: 'ไม่จำกัดชื่อผู้ขับขี่',
+  };
+
+  if (!initialPlan) {
+    return {
+      insList,
+      vehList,
+      currentVersionId: null as string | null,
+      currentVersionNo: 1,
+      currentVersionStatus: 'draft' as WorkflowStatus,
+      saveMode: 'new_version' as 'update' | 'new_version',
+      insurerId: insList.find((i) => i.is_active)?.id || insList[0]?.id || '',
+      name: '',
+      insuranceType: 'ชั้น 1' as InsuranceType,
+      workflowStatus: (canPublish ? 'published' : 'in_review') as 'draft' | 'in_review' | 'published',
+      effectiveFrom: defaultEffectiveFrom,
+      effectiveTo: defaultEffectiveTo,
+      notes: '',
+      scopeType: 'all_models' as ScopeType,
+      vehicleModelId: '',
+      minCarAge: 1 as number | string,
+      maxCarAge: 10 as number | string,
+      usageType: 'private' as 'private' | 'commercial' | 'all',
+      inspectionRequired: false,
+      ageBasis: 'registration_year' as 'registration_year' | 'manufacture_year',
+      priceOptionsList: [defaultTier],
+      coveragesState: buildCoveragePreset('ชั้น 1'),
+      documentTitle: '',
+      documentRef: '',
+      sourceType: 'rate_sheet' as SourceType,
+    };
+  }
+
+  const versions = InsuranceStore.getVersions()
+    .filter((v) => v.plan_id === initialPlan.id)
+    .sort((a, b) => b.version_no - a.version_no);
+  const publishedVer = versions.find((v) => v.workflow_status === 'published');
+  const latestVer = publishedVer ?? versions[0];
+
+  const isPublishedOrArchived =
+    latestVer?.workflow_status === 'published' || latestVer?.workflow_status === 'archived';
+
+  // Section 12.2: Published versions default to creating a new version to preserve history
+  const saveMode: 'update' | 'new_version' = isPublishedOrArchived ? 'new_version' : 'update';
+
+  const rawStatus = latestVer?.workflow_status ?? initialPlan.currentStatus ?? 'draft';
+  const resolvedWorkflowStatus: 'draft' | 'in_review' | 'published' =
+    !canPublish
+      ? rawStatus === 'draft'
+        ? 'draft'
+        : 'in_review'
+      : rawStatus === 'archived'
+      ? 'draft'
+      : rawStatus;
+
+  let scopeType: ScopeType = 'all_models';
+  let vehicleModelId = '';
+  let minCarAge: number | string = 1;
+  let maxCarAge: number | string = 10;
+  let usageType: 'private' | 'commercial' | 'all' = 'private';
+  let inspectionRequired = false;
+  let ageBasis: 'registration_year' | 'manufacture_year' = 'registration_year';
+  let priceOptionsList: PriceOptionItemState[] = [defaultTier];
+  let coveragesState: CoverageItemState[] = buildCoveragePreset(initialPlan.insurance_type || 'ชั้น 1');
+  let documentTitle = '';
+  let documentRef = '';
+  let sourceType: SourceType = 'rate_sheet';
+
+  if (latestVer) {
+    const rule = InsuranceStore.getEligibilityRules().find((r) => r.plan_version_id === latestVer.id);
+    if (rule) {
+      scopeType = rule.scope_type || 'all_models';
+      vehicleModelId = rule.vehicle_model_id || '';
+      minCarAge = rule.min_age ?? 1;
+      maxCarAge = rule.max_age ?? 10;
+      usageType = (rule.usage_type as 'private' | 'commercial' | 'all') || 'private';
+      inspectionRequired = rule.inspection_required ?? false;
+      ageBasis = rule.age_basis || 'registration_year';
+
+      const options = InsuranceStore.getPriceOptions().filter((o) => o.eligibility_rule_id === rule.id);
+      if (options.length > 0) {
+        priceOptionsList = options.map((o) => {
+          const sumVal = o.sum_insured_max ?? o.sum_insured_min;
+          return {
+            id: isPublishedOrArchived ? undefined : o.id,
+            label: o.label || '',
+            repairType: o.repair_type,
+            priceType: o.price_type,
+            hasPrice: o.premium_total !== null && o.premium_total !== undefined,
+            premiumTotal: o.premium_total ?? '',
+            hasSumInsured: sumVal !== null && sumVal !== undefined,
+            sumInsuredMax: sumVal ?? '',
+            deductibleAmount: o.deductible_amount ?? 0,
+            deductibleTerms: o.deductible_terms || '',
+            compulsoryIncluded: o.compulsory_included || 'excluded',
+            driverConditions: o.driver_conditions || 'ไม่จำกัดชื่อผู้ขับขี่',
+          };
+        });
+      }
+    }
+
+    const vCoverages = InsuranceStore.getVersionCoverages().filter(
+      (vc) => vc.plan_version_id === latestVer.id
+    );
+    if (vCoverages.length > 0) {
+      const isType1 = (initialPlan.insurance_type || '') === 'ชั้น 1';
+      const is2Plus = (initialPlan.insurance_type || '').includes('2+');
+      coveragesState = MOCK_COVERAGE_TYPES.map((ct) => {
+        const found = vCoverages.find((vc) => vc.coverage_type_id === ct.id);
+        let status: CoverageStatus = found?.status ?? 'unknown';
+        let limitAmount: number | string = found?.limit_amount ?? '';
+        let limitBasis = found?.limit_basis ?? '';
+        let terms = found?.terms ?? '';
+        const exclusions = found?.exclusions ?? '';
+
+        if (!found && ct.code === 'accessories') {
+          status = isType1 || is2Plus ? 'covered' : 'optional';
+          limitAmount = 20000;
+          limitBasis = 'ต่อครั้ง (ตามที่แจ้งไว้)';
+          terms = 'คุ้มครองอุปกรณ์ตกแต่งตามที่แจ้งไว้ไม่เกิน 20,000 บาท';
+        }
+
+        return {
+          code: ct.code,
+          name: ct.name,
+          category: ct.category,
+          status,
+          limitAmount,
+          limitBasis,
+          terms,
+          exclusions,
+        };
+      });
+    }
+
+    const docs = InsuranceStore.getDocuments().filter((d) => d.plan_version_id === latestVer.id);
+    if (docs.length > 0) {
+      documentTitle = docs[0].title;
+      documentRef = docs[0].page_reference || '';
+      sourceType = docs[0].source_type || 'rate_sheet';
+    }
+  }
+
+  return {
+    insList,
+    vehList,
+    currentVersionId: latestVer?.id ?? null,
+    currentVersionNo: latestVer?.version_no ?? 1,
+    currentVersionStatus: (latestVer?.workflow_status ?? 'draft') as WorkflowStatus,
+    saveMode,
+    insurerId: initialPlan.insurer_id || insList[0]?.id || '',
+    name: initialPlan.name || '',
+    insuranceType: initialPlan.insurance_type || 'ชั้น 1',
+    workflowStatus: resolvedWorkflowStatus,
+    effectiveFrom: latestVer?.effective_from || defaultEffectiveFrom,
+    effectiveTo: latestVer?.effective_to || defaultEffectiveTo,
+    notes: latestVer?.notes || '',
+    scopeType,
+    vehicleModelId,
+    minCarAge,
+    maxCarAge,
+    usageType,
+    inspectionRequired,
+    ageBasis,
+    priceOptionsList,
+    coveragesState,
+    documentTitle,
+    documentRef,
+    sourceType,
+  };
+}
+
+export function PlanFormModal({ isOpen, onClose, onSaved, initialPlan }: PlanFormModalProps) {
+  if (!isOpen) return null;
+
+  return (
+    <PlanFormModalBody
+      key={`${initialPlan?.id ?? 'create'}-${initialPlan?.currentStatus ?? 'new'}`}
+      onClose={onClose}
+      onSaved={onSaved}
+      initialPlan={initialPlan}
+    />
+  );
+}
+
+function PlanFormModalBody({
   onClose,
   onSaved,
   initialPlan,
-}: PlanFormModalProps) {
-  const [insurers, setInsurers] = useState<Insurer[]>([]);
-  const [vehicles, setVehicles] = useState<VehicleModel[]>([]);
+}: Omit<PlanFormModalProps, 'isOpen'>) {
+  const { userName, can } = useAuth();
+  const canPublish = can('canPublish');
 
-  // 1. Basic Plan info
-  const [currentVersionId, setCurrentVersionId] = useState<string | null>(null);
-  const [currentVersionNo, setCurrentVersionNo] = useState<number>(1);
-  const [saveMode, setSaveMode] = useState<'update' | 'new_version'>('update');
-  const [insurerId, setInsurerId] = useState('');
-  const [name, setName] = useState('');
-  const [insuranceType, setInsuranceType] = useState<InsuranceType>('ชั้น 1');
-  const [workflowStatus, setWorkflowStatus] = useState<'draft' | 'in_review' | 'published'>('published');
-  const [notes, setNotes] = useState('');
+  const [init] = useState(() => buildInitialModalState(initialPlan, canPublish));
 
-  // 2. Vehicle Eligibility
-  const [scopeType, setScopeType] = useState<'all_models' | 'specific_model'>('all_models');
-  const [vehicleModelId, setVehicleModelId] = useState('');
-  const [minCarAge, setMinCarAge] = useState<number | string>(1);
-  const [maxCarAge, setMaxCarAge] = useState<number | string>(10);
-  const [usageType, setUsageType] = useState<'private' | 'commercial' | 'all'>('private');
-  const [inspectionRequired, setInspectionRequired] = useState(false);
-  const [ageBasis, setAgeBasis] = useState<'registration_year' | 'manufacture_year'>('registration_year');
+  const insurers: Insurer[] = init.insList;
+  const vehicles: VehicleModel[] = init.vehList;
+  const currentVersionId = init.currentVersionId;
+  const currentVersionNo = init.currentVersionNo;
+  const currentVersionStatus = init.currentVersionStatus;
 
-  // 3. Price Options (Multiple tiers per plan!)
-  const [priceOptionsList, setPriceOptionsList] = useState<PriceOptionItemState[]>([
-    {
-      label: 'ซ่อมอู่ - ทุน 50,000',
-      repairType: 'garage',
-      priceType: 'fixed_for_conditions',
-      hasPrice: true,
-      premiumTotal: 5400,
-      sumInsuredMax: 50000,
-      deductibleAmount: 0,
-      deductibleTerms: '',
-      compulsoryIncluded: 'excluded',
-      driverConditions: 'ไม่จำกัดชื่อผู้ขับขี่',
-    },
-  ]);
+  const [saveMode, setSaveMode] = useState<'update' | 'new_version'>(init.saveMode);
+  const [insurerId, setInsurerId] = useState(init.insurerId);
+  const [name, setName] = useState(init.name);
+  const [insuranceType, setInsuranceType] = useState<InsuranceType>(init.insuranceType);
+  const [workflowStatus, setWorkflowStatus] = useState<'draft' | 'in_review' | 'published'>(
+    init.workflowStatus
+  );
+  const [effectiveFrom, setEffectiveFrom] = useState(init.effectiveFrom);
+  const [effectiveTo, setEffectiveTo] = useState(init.effectiveTo);
+  const [notes, setNotes] = useState(init.notes);
 
-  // 4. All 14 Standard Coverages
-  const [coveragesState, setCoveragesState] = useState<CoverageItemState[]>([]);
+  const [scopeType, setScopeType] = useState<ScopeType>(init.scopeType);
+  const [vehicleModelId, setVehicleModelId] = useState(init.vehicleModelId);
+  const [minCarAge, setMinCarAge] = useState<number | string>(init.minCarAge);
+  const [maxCarAge, setMaxCarAge] = useState<number | string>(init.maxCarAge);
+  const [usageType, setUsageType] = useState<'private' | 'commercial' | 'all'>(init.usageType);
+  const [inspectionRequired, setInspectionRequired] = useState(init.inspectionRequired);
+  const [ageBasis, setAgeBasis] = useState<'registration_year' | 'manufacture_year'>(init.ageBasis);
 
-  // 5. Document
-  const [documentTitle, setDocumentTitle] = useState('');
-  const [documentRef, setDocumentRef] = useState('');
-  const [sourceType, setSourceType] = useState('rate_sheet');
+  const [priceOptionsList, setPriceOptionsList] = useState<PriceOptionItemState[]>(
+    init.priceOptionsList
+  );
+  const [coveragesState, setCoveragesState] = useState<CoverageItemState[]>(init.coveragesState);
 
-  const [activeTab, setActiveTab] = useState<'info' | 'vehicle' | 'price' | 'coverages' | 'document'>('info');
+  const [documentTitle, setDocumentTitle] = useState(init.documentTitle);
+  const [documentRef, setDocumentRef] = useState(init.documentRef);
+  const [sourceType, setSourceType] = useState<SourceType>(init.sourceType);
+
+  const [activeTab, setActiveTab] = useState<ModalTabId>('info');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  // Helper: Apply Preset according to insurance type
   const applyCoveragePreset = (type: InsuranceType) => {
-    const isType1 = type === 'ชั้น 1';
-    const is2Plus = type === 'ชั้น 2+';
-    const is3Plus = type === 'ชั้น 3+';
-
-    const newCoverages: CoverageItemState[] = MOCK_COVERAGE_TYPES.map((ct) => {
-      let status: CoverageStatus = 'covered';
-      let limitAmount: number | string = '';
-      let limitBasis = 'ตามทุนประกัน';
-      let terms = '';
-
-      if (ct.code === 'own_damage') {
-        if (isType1) {
-          status = 'covered';
-          limitBasis = 'ตามทุนประกัน';
-          terms = 'คุ้มครองอุบัติเหตุทุกกรณี';
-        } else if (is2Plus || is3Plus) {
-          status = 'covered';
-          limitBasis = 'ตามทุนประกัน (ชนกับยานพาหนะทางบก)';
-          terms = 'ต้องมีคู่กรณีเป็นยานพาหนะทางบก';
-        } else {
-          status = 'not_covered';
-          limitBasis = '-';
-        }
-      } else if (ct.code === 'theft_fire') {
-        if (isType1 || is2Plus || type === 'ชั้น 2') {
-          status = 'covered';
-          limitBasis = 'ตามทุนประกัน';
-        } else {
-          status = 'not_covered';
-          limitBasis = '-';
-        }
-      } else if (ct.code === 'flood') {
-        if (isType1 || is2Plus) {
-          status = 'covered';
-          limitBasis = 'ตามทุนประกัน';
-        } else {
-          status = 'not_covered';
-          limitBasis = '-';
-        }
-      } else if (ct.code === 'windshield') {
-        status = isType1 ? 'covered' : 'not_covered';
-      } else if (ct.code === 'theft_personal_prop') {
-        status = isType1 ? 'optional' : 'not_covered';
-        if (status === 'optional') limitAmount = 20000;
-      } else if (ct.code === 'accessories') {
-        status = isType1 || is2Plus ? 'covered' : 'optional';
-        limitAmount = 20000;
-        limitBasis = 'ต่อครั้ง (ตามที่แจ้งไว้)';
-        terms = 'คุ้มครองอุปกรณ์ตกแต่งตามที่แจ้งไว้ไม่เกิน 20,000 บาท';
-      } else if (ct.code === 'tp_life_person') {
-        status = 'covered';
-        limitAmount = 1000000;
-        limitBasis = 'ต่อคน';
-      } else if (ct.code === 'tp_life_event') {
-        status = 'covered';
-        limitAmount = 10000000;
-        limitBasis = 'ต่อครั้ง';
-      } else if (ct.code === 'tp_property') {
-        status = 'covered';
-        limitAmount = isType1 ? 2500000 : 1000000;
-        limitBasis = 'ต่อครั้ง';
-      } else if (ct.code === 'pa_driver_passenger') {
-        status = 'covered';
-        limitAmount = 200000;
-        limitBasis = 'ต่อคน (5 ที่นั่ง)';
-      } else if (ct.code === 'medical_expenses') {
-        status = 'covered';
-        limitAmount = 200000;
-        limitBasis = 'ต่อคน';
-      } else if (ct.code === 'bail_bond') {
-        status = 'covered';
-        limitAmount = 300000;
-        limitBasis = 'ต่อครั้ง';
-      } else if (ct.code === 'roadside_assist') {
-        status = 'covered';
-        limitBasis = 'ช่วยเหลือ 24 ชม.';
-      } else if (ct.code === 'towing') {
-        status = 'covered';
-        limitAmount = 1500;
-        limitBasis = 'ไม่เกิน 50 กม.';
-      } else if (ct.code === 'loss_of_use') {
-        status = 'optional';
-        limitAmount = 500;
-        limitBasis = 'ต่อวัน';
-        terms = 'ซื้อความคุ้มครองเสริม';
-      }
-
-      return {
-        code: ct.code,
-        name: ct.name,
-        category: ct.category,
-        status,
-        limitAmount,
-        limitBasis,
-        terms,
-      };
-    });
-
-    setCoveragesState(newCoverages);
+    setCoveragesState(buildCoveragePreset(type));
   };
 
-  useEffect(() => {
-    if (isOpen) {
-      const insList = InsuranceStore.getInsurers();
-      const vehList = InsuranceStore.getVehicleModels();
-      setInsurers(insList);
-      setVehicles(vehList);
-
-      if (initialPlan) {
-        setInsurerId(initialPlan.insurer_id || insList[0]?.id || '');
-        setName(initialPlan.name || '');
-        setInsuranceType(initialPlan.insurance_type || 'ชั้น 1');
-        setWorkflowStatus(initialPlan.currentStatus || 'published');
-
-        // Load existing version data (latest version first)
-        const versions = InsuranceStore.getVersions()
-          .filter((v) => v.plan_id === initialPlan.id)
-          .sort((a, b) => b.version_no - a.version_no);
-        const latestVer = versions[0];
-        if (latestVer) {
-          setCurrentVersionId(latestVer.id);
-          setCurrentVersionNo(latestVer.version_no);
-          setSaveMode('update');
-          setNotes(latestVer.notes || '');
-
-          const rules = InsuranceStore.getEligibilityRules().filter((r) => r.plan_version_id === latestVer.id);
-          const rule = rules[0];
-          if (rule) {
-            setScopeType(rule.scope_type as any || 'all_models');
-            setVehicleModelId(rule.vehicle_model_id || '');
-            setMinCarAge(rule.min_age ?? 1);
-            setMaxCarAge(rule.max_age ?? 10);
-            setUsageType(rule.usage_type as any || 'private');
-            setInspectionRequired(rule.inspection_required ?? false);
-
-            // Load all price options for this rule!
-            const options = InsuranceStore.getPriceOptions().filter((o) => o.eligibility_rule_id === rule.id);
-            if (options.length > 0) {
-              setPriceOptionsList(
-                options.map((o) => ({
-                  id: o.id,
-                  label: o.label || '',
-                  repairType: o.repair_type,
-                  priceType: o.price_type,
-                  hasPrice: o.premium_total !== null && o.premium_total !== undefined,
-                  premiumTotal: o.premium_total ?? '',
-                  sumInsuredMax: o.sum_insured_max ?? 500000,
-                  deductibleAmount: o.deductible_amount ?? 0,
-                  deductibleTerms: o.deductible_terms || '',
-                  compulsoryIncluded: o.compulsory_included || 'excluded',
-                  driverConditions: o.driver_conditions || 'ไม่จำกัดชื่อผู้ขับขี่',
-                }))
-              );
-            }
-          }
-
-          // Load version coverages
-          const vCoverages = InsuranceStore.getVersionCoverages().filter((vc) => vc.plan_version_id === latestVer.id);
-          if (vCoverages.length > 0) {
-            const isType1 = (initialPlan.insurance_type || '') === 'ชั้น 1';
-            const is2Plus = (initialPlan.insurance_type || '').includes('2+');
-            const mapped = MOCK_COVERAGE_TYPES.map((ct) => {
-              const found = vCoverages.find((vc) => vc.coverage_type_id === ct.id);
-              let status: CoverageStatus = found?.status ?? 'unknown';
-              let limitAmount: number | string = found?.limit_amount ?? '';
-              let limitBasis = found?.limit_basis ?? '';
-              let terms = found?.terms ?? '';
-
-              if (!found && ct.code === 'accessories') {
-                status = isType1 || is2Plus ? 'covered' : 'optional';
-                limitAmount = 20000;
-                limitBasis = 'ต่อครั้ง (ตามที่แจ้งไว้)';
-                terms = 'คุ้มครองอุปกรณ์ตกแต่งตามที่แจ้งไว้ไม่เกิน 20,000 บาท';
-              }
-
-              return {
-                code: ct.code,
-                name: ct.name,
-                category: ct.category,
-                status,
-                limitAmount,
-                limitBasis,
-                terms,
-              };
-            });
-            setCoveragesState(mapped);
-          } else {
-            applyCoveragePreset(initialPlan.insurance_type || 'ชั้น 1');
-          }
-
-          // Load documents
-          const docs = InsuranceStore.getDocuments().filter((d) => d.plan_version_id === latestVer.id);
-          if (docs.length > 0) {
-            setDocumentTitle(docs[0].title);
-            setDocumentRef(docs[0].page_reference || '');
-          }
-        }
-      } else {
-        setCurrentVersionId(null);
-        setCurrentVersionNo(1);
-        setSaveMode('new_version');
-        setInsurerId(insList[0]?.id || '');
-        setName('');
-        setInsuranceType('ชั้น 1');
-        setWorkflowStatus('published');
-        setScopeType('all_models');
-        setVehicleModelId('');
-        setMinCarAge(1);
-        setMaxCarAge(10);
-        setPriceOptionsList([
-          {
-            label: 'ซ่อมอู่ - ทุน 50,000',
-            repairType: 'garage',
-            priceType: 'fixed_for_conditions',
-            hasPrice: true,
-            premiumTotal: 5400,
-            sumInsuredMax: 50000,
-            deductibleAmount: 0,
-            deductibleTerms: '',
-            compulsoryIncluded: 'excluded',
-            driverConditions: 'ไม่จำกัดชื่อผู้ขับขี่',
-          },
-        ]);
-        setDocumentTitle('');
-        setDocumentRef('');
-        applyCoveragePreset('ชั้น 1');
-      }
-      setActiveTab('info');
-      setErrorMsg('');
-    }
-  }, [isOpen, initialPlan]);
-
-  if (!isOpen) return null;
-
-  // Add a new price tier
   const handleAddPriceTier = () => {
     const lastTier = priceOptionsList[priceOptionsList.length - 1];
-    const newSum = lastTier ? Number(lastTier.sumInsuredMax) + 100000 : 100000;
-    const newPremium = lastTier && lastTier.hasPrice ? Number(lastTier.premiumTotal) + 1000 : 6500;
+    const newSum = lastTier && lastTier.hasSumInsured ? Number(lastTier.sumInsuredMax || 0) + 100000 : 100000;
+    const newPremium = lastTier && lastTier.hasPrice ? Number(lastTier.premiumTotal || 0) + 1000 : 6500;
     const repair = lastTier ? lastTier.repairType : 'garage';
 
     setPriceOptionsList((prev) => [
       ...prev,
       {
-        label: `${repair === 'dealer' ? 'ซ่อมห้าง' : 'ซ่อมอู่'} - ทุน ${newSum.toLocaleString()}`,
+        label: formatAutoLabel(repair, true, newSum),
         repairType: repair,
         priceType: 'fixed_for_conditions',
         hasPrice: true,
         premiumTotal: newPremium,
+        hasSumInsured: true,
         sumInsuredMax: newSum,
         deductibleAmount: 0,
         deductibleTerms: '',
@@ -366,18 +471,17 @@ export function PlanFormModal({
     ]);
   };
 
-  // Duplicate an existing price tier
   const handleDuplicateTier = (index: number) => {
     const source = priceOptionsList[index];
-    const newSum = Number(source.sumInsuredMax) + 50000;
-    const newPremium = source.hasPrice ? Number(source.premiumTotal) + 800 : '';
+    const newSum = source.hasSumInsured ? Number(source.sumInsuredMax || 0) + 50000 : '';
+    const newPremium = source.hasPrice ? Number(source.premiumTotal || 0) + 800 : '';
 
     setPriceOptionsList((prev) => [
       ...prev.slice(0, index + 1),
       {
         ...source,
         id: undefined,
-        label: `${source.repairType === 'dealer' ? 'ซ่อมห้าง' : 'ซ่อมอู่'} - ทุน ${newSum.toLocaleString()}`,
+        label: formatAutoLabel(source.repairType, source.hasSumInsured, newSum),
         sumInsuredMax: newSum,
         premiumTotal: newPremium,
       },
@@ -385,26 +489,33 @@ export function PlanFormModal({
     ]);
   };
 
-  // Remove a price tier
   const handleRemoveTier = (index: number) => {
     if (priceOptionsList.length <= 1) {
-      alert('แพ็กเกจต้องมีตัวเลือกราคาอย่างน้อย 1 รายการ');
+      setErrorMsg('แพ็กเกจต้องมีตัวเลือกราคาอย่างน้อย 1 รายการ');
       return;
     }
     setPriceOptionsList((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // Update a field in a price tier
-  const handleUpdateTierField = (index: number, field: keyof PriceOptionItemState, value: any) => {
+  const handleUpdateTierField = <K extends keyof PriceOptionItemState>(
+    index: number,
+    field: K,
+    value: PriceOptionItemState[K]
+  ) => {
     setPriceOptionsList((prev) => {
       const copy = [...prev];
+      const prevLabel = copy[index].label;
       copy[index] = { ...copy[index], [field]: value };
 
-      // Auto update label if sum or repair changed and label matches default pattern
-      if (field === 'sumInsuredMax' || field === 'repairType') {
-        const sum = field === 'sumInsuredMax' ? value : copy[index].sumInsuredMax;
-        const rep = field === 'repairType' ? value : copy[index].repairType;
-        copy[index].label = `${rep === 'dealer' ? 'ซ่อมห้าง' : 'ซ่อมอู่'} - ทุน ${Number(sum).toLocaleString()}`;
+      if (
+        (field === 'sumInsuredMax' || field === 'repairType' || field === 'hasSumInsured') &&
+        isAutoGeneratedLabel(prevLabel)
+      ) {
+        copy[index].label = formatAutoLabel(
+          copy[index].repairType,
+          copy[index].hasSumInsured,
+          copy[index].sumInsuredMax
+        );
       }
 
       return copy;
@@ -417,7 +528,11 @@ export function PlanFormModal({
     );
   };
 
-  const handleCoverageFieldChange = (code: string, field: 'limitAmount' | 'limitBasis' | 'terms', value: any) => {
+  const handleCoverageFieldChange = (
+    code: string,
+    field: 'limitAmount' | 'limitBasis' | 'terms' | 'exclusions',
+    value: string
+  ) => {
     setCoveragesState((prev) =>
       prev.map((c) => (c.code === code ? { ...c, [field]: value } : c))
     );
@@ -425,26 +540,102 @@ export function PlanFormModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) {
-      setErrorMsg('กรุณากรอกชื่อแพ็กเกจ');
+    setErrorMsg('');
+
+    // 1. Validate Plan Info
+    const planParse = PlanSchema.safeParse({
+      insurer_id: insurerId,
+      name,
+      insurance_type: insuranceType,
+    });
+    if (!planParse.success) {
+      setErrorMsg(planParse.error.issues[0]?.message || 'ข้อมูลแพ็กเกจไม่ถูกต้อง');
       setActiveTab('info');
       return;
     }
-    if (!insurerId) {
-      setErrorMsg('กรุณาเลือกบริษัทประกันภัย');
+
+    // 2. Validate Version Dates
+    const versionParse = PlanVersionSchema.safeParse({
+      plan_id: initialPlan?.id || 'temp-plan',
+      version_no: 1,
+      effective_from: effectiveFrom || null,
+      effective_to: effectiveTo || null,
+      notes: notes || null,
+    });
+    if (!versionParse.success) {
+      setErrorMsg(versionParse.error.issues[0]?.message || 'วันที่บังคับใช้ไม่ถูกต้อง');
       setActiveTab('info');
       return;
     }
+
+    // 3. Validate Vehicle Eligibility Rule
+    const parsedMinAge = minCarAge === '' ? null : Number(minCarAge);
+    const parsedMaxAge = maxCarAge === '' ? null : Number(maxCarAge);
+    const ruleParse = EligibilityRuleSchema.safeParse({
+      plan_version_id: 'temp-version',
+      scope_type: scopeType,
+      vehicle_model_id: scopeType === 'specific_model' ? vehicleModelId || null : null,
+      min_age: parsedMinAge,
+      max_age: parsedMaxAge,
+      age_basis: ageBasis,
+      usage_type: usageType,
+      inspection_required: inspectionRequired,
+    });
+    if (!ruleParse.success) {
+      setErrorMsg(ruleParse.error.issues[0]?.message || 'เงื่อนไขรถยนต์ไม่ถูกต้อง');
+      setActiveTab('vehicle');
+      return;
+    }
+
+    // 4. Validate Price Options
     if (priceOptionsList.length === 0) {
       setErrorMsg('กรุณาระบุตัวเลือกราคาและทุนประกันอย่างน้อย 1 รายการ');
       setActiveTab('price');
       return;
     }
 
-    setIsSubmitting(true);
-    setErrorMsg('');
+    for (let i = 0; i < priceOptionsList.length; i++) {
+      const po = priceOptionsList[i];
+      const premVal = po.hasPrice && po.premiumTotal !== '' ? Number(po.premiumTotal) : null;
+      const sumVal = po.hasSumInsured && po.sumInsuredMax !== '' ? Number(po.sumInsuredMax) : null;
+      const deductVal = po.deductibleAmount !== '' ? Number(po.deductibleAmount) : 0;
+      const resolvedLabel =
+        po.label.trim() || formatAutoLabel(po.repairType, po.hasSumInsured, po.sumInsuredMax);
 
-    const targetVersionId = initialPlan && saveMode === 'update' && currentVersionId ? currentVersionId : undefined;
+      const poParse = PriceOptionSchema.safeParse({
+        eligibility_rule_id: 'temp-rule',
+        label: resolvedLabel,
+        repair_type: po.repairType,
+        price_type: premVal !== null ? po.priceType : 'unknown',
+        premium_total: premVal,
+        sum_insured_min: sumVal,
+        sum_insured_max: sumVal,
+        deductible_amount: deductVal,
+        compulsory_included: po.compulsoryIncluded,
+      });
+
+      if (!poParse.success) {
+        setErrorMsg(`ตัวเลือกที่ ${i + 1}: ${poParse.error.issues[0]?.message || 'ข้อมูลราคาไม่ถูกต้อง'}`);
+        setActiveTab('price');
+        return;
+      }
+    }
+
+    // 5. Enforce RBAC & Source Document rule before publishing (Section 8.4)
+    const effectiveStatus: WorkflowStatus = !canPublish && workflowStatus === 'published'
+      ? 'in_review'
+      : workflowStatus;
+
+    if (effectiveStatus === 'published' && !documentTitle.trim()) {
+      setErrorMsg('ตามกฎ Section 8.4 ต้องระบุชื่อเอกสารอ้างอิงต้นทางอย่างน้อย 1 รายการก่อนเผยแพร่');
+      setActiveTab('document');
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    const targetVersionId =
+      initialPlan && saveMode === 'update' && currentVersionId ? currentVersionId : undefined;
 
     try {
       InsuranceStore.createOrUpdatePlan({
@@ -453,54 +644,69 @@ export function PlanFormModal({
         insurerId,
         name,
         insuranceType,
-        workflowStatus,
-        notes: saveMode === 'new_version' && initialPlan
-          ? `สร้างรุ่นที่ ${currentVersionNo + 1}: ${notes || 'ปรับปรุงเงื่อนไขใหม่'}`
-          : notes,
+        workflowStatus: effectiveStatus,
+        effectiveFrom: effectiveFrom || null,
+        effectiveTo: effectiveTo || null,
+        actorName: userName,
+        notes:
+          saveMode === 'new_version' && initialPlan
+            ? notes || `ปรับปรุงข้อมูลจากรุ่นที่ ${currentVersionNo}`
+            : notes,
         // Eligibility
         scopeType,
         vehicleModelId: scopeType === 'specific_model' ? vehicleModelId : null,
-        minCarAge: Number(minCarAge),
-        maxCarAge: Number(maxCarAge),
+        minCarAge: parsedMinAge,
+        maxCarAge: parsedMaxAge,
+        ageBasis,
         usageType,
         inspectionRequired,
-        // Multiple Price Options / Tiers!
-        priceOptions: priceOptionsList.map((po) => ({
-          id: po.id,
-          label: po.label || `${po.repairType === 'dealer' ? 'ซ่อมห้าง' : 'ซ่อมอู่'} - ทุน ${Number(po.sumInsuredMax).toLocaleString()}`,
-          repairType: po.repairType,
-          priceType: po.priceType,
-          premiumTotal: po.hasPrice && po.premiumTotal !== '' ? Number(po.premiumTotal) : null,
-          sumInsuredMin: Number(po.sumInsuredMax),
-          sumInsuredMax: Number(po.sumInsuredMax),
-          deductibleAmount: Number(po.deductibleAmount || 0),
-          deductibleTerms: po.deductibleTerms || undefined,
-          compulsoryIncluded: po.compulsoryIncluded,
-          driverConditions: po.driverConditions || 'ไม่จำกัดชื่อผู้ขับขี่',
-        })),
+        // Price Options
+        priceOptions: priceOptionsList.map((po) => {
+          const premVal = po.hasPrice && po.premiumTotal !== '' ? Number(po.premiumTotal) : null;
+          const sumVal = po.hasSumInsured && po.sumInsuredMax !== '' ? Number(po.sumInsuredMax) : null;
+          return {
+            id: saveMode === 'new_version' ? undefined : po.id,
+            label: po.label.trim() || formatAutoLabel(po.repairType, po.hasSumInsured, po.sumInsuredMax),
+            repairType: po.repairType,
+            priceType: premVal !== null ? po.priceType : 'unknown',
+            premiumTotal: premVal,
+            sumInsuredMin: sumVal,
+            sumInsuredMax: sumVal,
+            deductibleAmount: Number(po.deductibleAmount || 0),
+            deductibleTerms: po.deductibleTerms || undefined,
+            compulsoryIncluded: po.compulsoryIncluded,
+            driverConditions: po.driverConditions || 'ไม่จำกัดชื่อผู้ขับขี่',
+            validFrom: effectiveFrom || null,
+            validTo: effectiveTo || null,
+          };
+        }),
         // Coverages
         coverages: coveragesState.map((c) => ({
           code: c.code,
           status: c.status,
-          limitAmount: c.limitAmount ? Number(c.limitAmount) : null,
+          limitAmount: c.limitAmount !== '' ? Number(c.limitAmount) : null,
           limitBasis: c.limitBasis || undefined,
           terms: c.terms || undefined,
+          exclusions: c.exclusions || undefined,
         })),
         // Document
+        sourceType,
         documentTitle: documentTitle || undefined,
         documentRef: documentRef || undefined,
       });
 
       onSaved();
       onClose();
-    } catch (err: any) {
-      setErrorMsg(err.message || 'บันทึกข้อมูลไม่สำเร็จ');
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : 'บันทึกข้อมูลไม่สำเร็จ');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const categories = Array.from(new Set(MOCK_COVERAGE_TYPES.map((c) => c.category)));
+  const isLockedPublished =
+    currentVersionStatus === 'published' || currentVersionStatus === 'archived';
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
@@ -517,6 +723,7 @@ export function PlanFormModal({
             </p>
           </div>
           <button
+            type="button"
             onClick={onClose}
             className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition cursor-pointer"
           >
@@ -526,17 +733,19 @@ export function PlanFormModal({
 
         {/* Tab Navigation */}
         <div className="flex items-center gap-1.5 overflow-x-auto py-3 border-b border-slate-100 shrink-0 text-xs">
-          {[
-            { id: 'info', label: '1. ข้อมูลแพ็กเกจ' },
-            { id: 'vehicle', label: '2. เงื่อนไขรถ' },
-            { id: 'price', label: `3. ราคาและทุนประกัน (${priceOptionsList.length} ตัวเลือก)` },
-            { id: 'coverages', label: `4. ความคุ้มครอง (${coveragesState.length} หมวด)` },
-            { id: 'document', label: '5. เอกสารอ้างอิง' },
-          ].map((tab) => (
+          {(
+            [
+              { id: 'info', label: '1. ข้อมูลแพ็กเกจ' },
+              { id: 'vehicle', label: '2. เงื่อนไขรถ' },
+              { id: 'price', label: `3. ราคาและทุนประกัน (${priceOptionsList.length} ตัวเลือก)` },
+              { id: 'coverages', label: `4. ความคุ้มครอง (${coveragesState.length} หมวด)` },
+              { id: 'document', label: '5. เอกสารอ้างอิง' },
+            ] as { id: ModalTabId; label: string }[]
+          ).map((tab) => (
             <button
               key={tab.id}
               type="button"
-              onClick={() => setActiveTab(tab.id as any)}
+              onClick={() => setActiveTab(tab.id)}
               className={`px-3 py-1.5 rounded-lg font-bold transition whitespace-nowrap cursor-pointer ${
                 activeTab === tab.id
                   ? 'bg-blue-600 text-white shadow-xs'
@@ -555,7 +764,7 @@ export function PlanFormModal({
           </div>
         )}
 
-        {/* Form Body (Scrollable) */}
+        {/* Form Body */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto py-4 space-y-6 text-xs pr-1">
           {/* TAB 1: General Info */}
           {activeTab === 'info' && (
@@ -565,7 +774,7 @@ export function PlanFormModal({
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-bold text-blue-950 flex items-center gap-1.5">
                       <span className="w-2 h-2 rounded-full bg-blue-600 inline-block animate-pulse"></span>
-                      เวอร์ชันปัจจุบันที่กำลังแก้ไข: รุ่นที่ {currentVersionNo}
+                      รุ่นอ้างอิงล่าสุด: รุ่นที่ {currentVersionNo} ({currentVersionStatus})
                     </span>
                     <span className="text-[11px] text-blue-700 bg-blue-100/70 px-2 py-0.5 rounded-md font-mono">
                       ID: {currentVersionId?.slice(0, 12)}...
@@ -576,24 +785,28 @@ export function PlanFormModal({
                       <input
                         type="radio"
                         name="saveMode"
-                        value="update"
-                        checked={saveMode === 'update'}
-                        onChange={() => setSaveMode('update')}
-                        className="text-blue-600 focus:ring-blue-500"
-                      />
-                      <span>อัปเดตข้อมูลในรุ่นที่ {currentVersionNo} โดยตรง (แก้ไขข้อมูลเดิม)</span>
-                    </label>
-                    <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="saveMode"
                         value="new_version"
                         checked={saveMode === 'new_version'}
                         onChange={() => setSaveMode('new_version')}
                         className="text-blue-600 focus:ring-blue-500"
                       />
-                      <span>สร้างเป็นรุ่นใหม่ (รุ่นที่ {currentVersionNo + 1}) — เก็บประวัติรุ่นเดิม</span>
+                      <span>
+                        สร้างเป็นรุ่นใหม่ (รุ่นที่ {currentVersionNo + 1}) — เก็บประวัติรุ่นเดิมตามมาตรฐาน
+                      </span>
                     </label>
+                    {!isLockedPublished && (
+                      <label className="flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="saveMode"
+                          value="update"
+                          checked={saveMode === 'update'}
+                          onChange={() => setSaveMode('update')}
+                          className="text-blue-600 focus:ring-blue-500"
+                        />
+                        <span>แก้ไขในรุ่นร่างปัจจุบัน (รุ่นที่ {currentVersionNo}) โดยตรง</span>
+                      </label>
+                    )}
                   </div>
                 </div>
               )}
@@ -609,7 +822,7 @@ export function PlanFormModal({
                   >
                     {insurers.map((ins) => (
                       <option key={ins.id} value={ins.id}>
-                        {ins.name}
+                        {ins.name} {!ins.is_active ? '(ปิดใช้งาน)' : ''}
                       </option>
                     ))}
                   </select>
@@ -622,7 +835,14 @@ export function PlanFormModal({
                     onChange={(e) => {
                       const newType = e.target.value as InsuranceType;
                       setInsuranceType(newType);
-                      applyCoveragePreset(newType);
+                      if (
+                        !initialPlan ||
+                        confirm(
+                          `ต้องการรีเซ็ตตารางความคุ้มครอง 15 หมวดให้เป็นค่าเริ่มต้นของ "${newType}" หรือไม่? (กดยกเลิกเพื่อคงค่าที่ปรับแต่งไว้เดิม)`
+                        )
+                      ) {
+                        applyCoveragePreset(newType);
+                      }
                     }}
                     className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500"
                   >
@@ -649,13 +869,38 @@ export function PlanFormModal({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
+                  <label className="font-semibold text-slate-700 block mb-1">วันเริ่มมีผลบังคับใช้</label>
+                  <input
+                    type="date"
+                    value={effectiveFrom}
+                    onChange={(e) => setEffectiveFrom(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">วันสิ้นสุดผลบังคับใช้</label>
+                  <input
+                    type="date"
+                    value={effectiveTo}
+                    onChange={(e) => setEffectiveTo(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
                   <label className="font-semibold text-slate-700 block mb-1">สถานะข้อมูล (Workflow Status)</label>
                   <select
                     value={workflowStatus}
-                    onChange={(e) => setWorkflowStatus(e.target.value as any)}
+                    onChange={(e) =>
+                      setWorkflowStatus(e.target.value as 'draft' | 'in_review' | 'published')
+                    }
                     className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value="published">เผยแพร่ทันที (Published - แสดงในผลค้นหา)</option>
+                    {canPublish && (
+                      <option value="published">เผยแพร่ทันที (Published - แสดงในผลค้นหา)</option>
+                    )}
                     <option value="in_review">ส่งตรวจ (In Review - ไปที่คิวตรวจสอบ)</option>
                     <option value="draft">บันทึกร่าง (Draft)</option>
                   </select>
@@ -683,11 +928,12 @@ export function PlanFormModal({
                   <label className="font-semibold text-slate-700 block mb-1">ขอบเขตรุ่นรถที่รับประกัน</label>
                   <select
                     value={scopeType}
-                    onChange={(e) => setScopeType(e.target.value as any)}
+                    onChange={(e) => setScopeType(e.target.value as ScopeType)}
                     className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="all_models">รองรับทุกรุ่นภายใต้เงื่อนไข (All Models)</option>
                     <option value="specific_model">เฉพาะรุ่นรถที่ระบุ (Specific Model)</option>
+                    <option value="unknown">ยังไม่ระบุขอบเขตรุ่นรถชัดเจน (Unknown)</option>
                   </select>
                 </div>
 
@@ -735,7 +981,9 @@ export function PlanFormModal({
                   <label className="font-semibold text-slate-700 block mb-1">เกณฑ์นับอายุรถ</label>
                   <select
                     value={ageBasis}
-                    onChange={(e) => setAgeBasis(e.target.value as any)}
+                    onChange={(e) =>
+                      setAgeBasis(e.target.value as 'registration_year' | 'manufacture_year')
+                    }
                     className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl"
                   >
                     <option value="registration_year">ปีจดทะเบียน</option>
@@ -749,7 +997,7 @@ export function PlanFormModal({
                   <label className="font-semibold text-slate-700 block mb-1">ลักษณะการใช้งาน</label>
                   <select
                     value={usageType}
-                    onChange={(e) => setUsageType(e.target.value as any)}
+                    onChange={(e) => setUsageType(e.target.value as 'private' | 'commercial' | 'all')}
                     className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl"
                   >
                     <option value="private">การใช้งานส่วนบุคคล (Private)</option>
@@ -773,10 +1021,9 @@ export function PlanFormModal({
             </div>
           )}
 
-          {/* TAB 3: Multiple Price Options / Tiers (แก้ปัญหา: แพ็กเกจชื่อเดียวกัน ต่างกันที่ทุนและเบี้ย) */}
+          {/* TAB 3: Multiple Price Options / Tiers */}
           {activeTab === 'price' && (
             <div className="space-y-4">
-              {/* Informative Guidance Banner */}
               <div className="bg-blue-50/70 border border-blue-200 rounded-2xl p-4 flex items-start justify-between gap-3">
                 <div className="flex items-start gap-2.5">
                   <Sparkles className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
@@ -786,8 +1033,7 @@ export function PlanFormModal({
                     </span>
                     <p className="text-[11px] text-blue-800 mt-0.5">
                       แพ็กเกจชื่อเดียวกันสามารถมีได้หลายตัวเลือกราคา โดยระบุทุนประกันและเบี้ยที่ต่างกันได้
-                      (เช่น ทุน 50,000 เบี้ย 5,400 / ทุน 100,000 เบี้ย 6,200 หรือ ซ่อมห้าง/ซ่อมอู่)
-                      ทุกตัวเลือกจะแชร์ชื่อแพ็กเกจและความคุ้มครองหลักร่วมกันโดยอัตโนมัติ
+                      หากยังไม่ทราบราคาหรือทุนประกัน สามารถติ๊ก &quot;ยังไม่ระบุ&quot; ได้โดยไม่บันทึกเป็น 0 บาท
                     </p>
                   </div>
                 </div>
@@ -802,25 +1048,27 @@ export function PlanFormModal({
                 </button>
               </div>
 
-              {/* Price Options Cards List */}
               <div className="space-y-3">
                 {priceOptionsList.map((tier, idx) => (
                   <div
                     key={idx}
                     className="bg-white border-2 border-slate-200 rounded-2xl p-4 shadow-2xs space-y-3 relative hover:border-slate-300 transition"
                   >
-                    {/* Tier Card Header */}
-                    <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                      <div className="flex items-center gap-2">
-                        <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-800 font-bold flex items-center justify-center text-xs">
+                    <div className="flex items-center justify-between gap-2 pb-2 border-b border-slate-100">
+                      <div className="flex items-center gap-2 flex-1">
+                        <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-800 font-bold flex items-center justify-center text-xs shrink-0">
                           {idx + 1}
                         </span>
-                        <span className="font-bold text-slate-800 text-sm">
-                          {tier.label || `ตัวเลือกที่ ${idx + 1}`}
-                        </span>
+                        <input
+                          type="text"
+                          value={tier.label}
+                          onChange={(e) => handleUpdateTierField(idx, 'label', e.target.value)}
+                          placeholder={`ชื่อตัวเลือกที่ ${idx + 1}`}
+                          className="font-bold text-slate-800 text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 w-full max-w-sm"
+                        />
                       </div>
 
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 shrink-0">
                         <button
                           type="button"
                           onClick={() => handleDuplicateTier(idx)}
@@ -844,21 +1092,39 @@ export function PlanFormModal({
                       </div>
                     </div>
 
-                    {/* Inputs Grid for this Tier */}
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
-                        <label className="font-semibold text-slate-700 block mb-1">
-                          ทุนประกันภัย (บาท) *
-                        </label>
-                        <input
-                          type="number"
-                          required
-                          step={10000}
-                          placeholder="เช่น 50000 หรือ 100000"
-                          value={tier.sumInsuredMax}
-                          onChange={(e) => handleUpdateTierField(idx, 'sumInsuredMax', e.target.value)}
-                          className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 text-sm"
-                        />
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="font-semibold text-slate-700">ทุนประกันภัย (บาท)</label>
+                          <label className="text-[10px] text-slate-500 flex items-center gap-1 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={!tier.hasSumInsured}
+                              onChange={(e) =>
+                                handleUpdateTierField(idx, 'hasSumInsured', !e.target.checked)
+                              }
+                              className="rounded"
+                            />
+                            <span>ยังไม่ระบุ</span>
+                          </label>
+                        </div>
+                        {tier.hasSumInsured ? (
+                          <input
+                            type="number"
+                            min={0}
+                            step={10000}
+                            placeholder="เช่น 50000 หรือ 100000"
+                            value={tier.sumInsuredMax}
+                            onChange={(e) =>
+                              handleUpdateTierField(idx, 'sumInsuredMax', e.target.value)
+                            }
+                            className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 text-sm"
+                          />
+                        ) : (
+                          <div className="p-2 bg-slate-100 border border-slate-200 rounded-xl text-slate-600 font-semibold text-xs">
+                            ยังไม่ระบุทุนประกัน
+                          </div>
+                        )}
                       </div>
 
                       <div>
@@ -868,7 +1134,9 @@ export function PlanFormModal({
                             <input
                               type="checkbox"
                               checked={!tier.hasPrice}
-                              onChange={(e) => handleUpdateTierField(idx, 'hasPrice', !e.target.checked)}
+                              onChange={(e) =>
+                                handleUpdateTierField(idx, 'hasPrice', !e.target.checked)
+                              }
                               className="rounded"
                             />
                             <span>ยังไม่ระบุ</span>
@@ -877,10 +1145,13 @@ export function PlanFormModal({
                         {tier.hasPrice ? (
                           <input
                             type="number"
+                            min={0}
                             step={100}
                             placeholder="เช่น 5400"
                             value={tier.premiumTotal}
-                            onChange={(e) => handleUpdateTierField(idx, 'premiumTotal', e.target.value)}
+                            onChange={(e) =>
+                              handleUpdateTierField(idx, 'premiumTotal', e.target.value)
+                            }
                             className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-blue-900 text-sm"
                           />
                         ) : (
@@ -894,7 +1165,9 @@ export function PlanFormModal({
                         <label className="font-semibold text-slate-700 block mb-1">ลักษณะการซ่อม *</label>
                         <select
                           value={tier.repairType}
-                          onChange={(e) => handleUpdateTierField(idx, 'repairType', e.target.value as RepairType)}
+                          onChange={(e) =>
+                            handleUpdateTierField(idx, 'repairType', e.target.value as RepairType)
+                          }
                           className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs"
                         >
                           <option value="garage">ซ่อมอู่ (อู่ในเครือ)</option>
@@ -913,7 +1186,9 @@ export function PlanFormModal({
                           min={0}
                           step={1000}
                           value={tier.deductibleAmount}
-                          onChange={(e) => handleUpdateTierField(idx, 'deductibleAmount', e.target.value)}
+                          onChange={(e) =>
+                            handleUpdateTierField(idx, 'deductibleAmount', e.target.value)
+                          }
                           placeholder="0 หากไม่มี"
                           className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs"
                         />
@@ -923,7 +1198,13 @@ export function PlanFormModal({
                         <label className="font-semibold text-slate-700 block mb-1">การรวม พ.ร.บ.</label>
                         <select
                           value={tier.compulsoryIncluded}
-                          onChange={(e) => handleUpdateTierField(idx, 'compulsoryIncluded', e.target.value as any)}
+                          onChange={(e) =>
+                            handleUpdateTierField(
+                              idx,
+                              'compulsoryIncluded',
+                              e.target.value as CompulsoryInclusion
+                            )
+                          }
                           className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs"
                         >
                           <option value="excluded">ไม่รวม พ.ร.บ.</option>
@@ -938,7 +1219,9 @@ export function PlanFormModal({
                           type="text"
                           placeholder="เช่น ไม่จำกัดชื่อ หรือ ระบุอายุ"
                           value={tier.driverConditions}
-                          onChange={(e) => handleUpdateTierField(idx, 'driverConditions', e.target.value)}
+                          onChange={(e) =>
+                            handleUpdateTierField(idx, 'driverConditions', e.target.value)
+                          }
                           className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs"
                         />
                       </div>
@@ -947,7 +1230,6 @@ export function PlanFormModal({
                 ))}
               </div>
 
-              {/* Bottom Add Tier Button */}
               <div className="pt-2">
                 <button
                   type="button"
@@ -961,41 +1243,30 @@ export function PlanFormModal({
             </div>
           )}
 
-          {/* TAB 4: Full 14 Coverages Editor */}
+          {/* TAB 4: Full 15 Standard Coverages Editor */}
           {activeTab === 'coverages' && (
             <div className="space-y-6">
-              {/* Preset buttons */}
-              <div className="flex items-center justify-between bg-blue-50/70 p-3 rounded-2xl border border-blue-200">
+              <div className="flex flex-wrap items-center justify-between gap-2 bg-blue-50/70 p-3 rounded-2xl border border-blue-200">
                 <div className="flex items-center gap-2 text-blue-900 font-bold">
                   <Sparkles className="w-4 h-4 text-blue-600" />
                   <span>ตั้งค่ามาตรฐานด่วนตามประเภทประกัน:</span>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => applyCoveragePreset('ชั้น 1')}
-                    className="px-2.5 py-1 bg-white hover:bg-blue-100 text-blue-800 rounded-lg border border-blue-300 font-semibold cursor-pointer"
-                  >
-                    ชั้น 1
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => applyCoveragePreset('ชั้น 2+')}
-                    className="px-2.5 py-1 bg-white hover:bg-blue-100 text-blue-800 rounded-lg border border-blue-300 font-semibold cursor-pointer"
-                  >
-                    ชั้น 2+
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => applyCoveragePreset('ชั้น 3+')}
-                    className="px-2.5 py-1 bg-white hover:bg-blue-100 text-blue-800 rounded-lg border border-blue-300 font-semibold cursor-pointer"
-                  >
-                    ชั้น 3+
-                  </button>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {(['ชั้น 1', 'ชั้น 2+', 'ชั้น 3+', 'ชั้น 2', 'ชั้น 3'] as InsuranceType[]).map(
+                    (presetType) => (
+                      <button
+                        key={presetType}
+                        type="button"
+                        onClick={() => applyCoveragePreset(presetType)}
+                        className="px-2.5 py-1 bg-white hover:bg-blue-100 text-blue-800 rounded-lg border border-blue-300 font-semibold cursor-pointer"
+                      >
+                        {presetType}
+                      </button>
+                    )
+                  )}
                 </div>
               </div>
 
-              {/* Coverages categorized */}
               {categories.map((catName) => {
                 const items = coveragesState.filter((c) => c.category === catName);
                 if (items.length === 0) return null;
@@ -1014,7 +1285,6 @@ export function PlanFormModal({
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                             <span className="font-bold text-slate-900 text-xs">{cov.name}</span>
 
-                            {/* Status Selector */}
                             <div className="flex items-center gap-1">
                               {(
                                 [
@@ -1046,13 +1316,13 @@ export function PlanFormModal({
                             </div>
                           </div>
 
-                          {/* Limit Amount & Basis inputs */}
                           {cov.status === 'covered' || cov.status === 'optional' ? (
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 border-t border-slate-100">
+                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 pt-1 border-t border-slate-100">
                               <div>
                                 <input
                                   type="number"
-                                  placeholder="วงเงิน (บาท) เว้นว่างหากตามทุน"
+                                  min={0}
+                                  placeholder="วงเงิน (บาท)"
                                   value={cov.limitAmount}
                                   onChange={(e) =>
                                     handleCoverageFieldChange(cov.code, 'limitAmount', e.target.value)
@@ -1063,7 +1333,7 @@ export function PlanFormModal({
                               <div>
                                 <input
                                   type="text"
-                                  placeholder="เกณฑ์วงเงิน เช่น ต่อคน, ต่อครั้ง"
+                                  placeholder="เกณฑ์วงเงิน เช่น ตามทุน, ต่อครั้ง"
                                   value={cov.limitBasis}
                                   onChange={(e) =>
                                     handleCoverageFieldChange(cov.code, 'limitBasis', e.target.value)
@@ -1074,10 +1344,21 @@ export function PlanFormModal({
                               <div>
                                 <input
                                   type="text"
-                                  placeholder="เงื่อนไข/ข้อยกเว้นเพิ่มเติม"
+                                  placeholder="เงื่อนไขความคุ้มครอง"
                                   value={cov.terms}
                                   onChange={(e) =>
                                     handleCoverageFieldChange(cov.code, 'terms', e.target.value)
+                                  }
+                                  className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs"
+                                />
+                              </div>
+                              <div>
+                                <input
+                                  type="text"
+                                  placeholder="ข้อยกเว้น (ถ้ามี)"
+                                  value={cov.exclusions}
+                                  onChange={(e) =>
+                                    handleCoverageFieldChange(cov.code, 'exclusions', e.target.value)
                                   }
                                   className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs"
                                 />
@@ -1098,10 +1379,10 @@ export function PlanFormModal({
             <div className="space-y-4">
               <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-slate-600 text-xs">
                 <p className="font-semibold text-slate-800 mb-1">
-                  การอ้างอิงเอกสารต้นทาง (Section 13)
+                  การอ้างอิงเอกสารต้นทาง (Section 8.4 & Section 13)
                 </p>
                 <p>
-                  ตามหลักการออกแบบ ทุกชุดข้อมูลที่เผยแพร่ต้องมีเอกสารอ้างอิงต้นทาง (Rate sheet, Brochure หรือ กรมธรรม์) และระบุเลขหน้าหรือหัวข้อ เพื่อให้สมาชิกในทีมสามารถตรวจเทียบย้อนหลังได้
+                  ตามหลักการออกแบบ ทุกชุดข้อมูลที่เผยแพร่ต้องมีเอกสารอ้างอิงต้นทางอย่างน้อย 1 รายการ (Rate sheet, Brochure หรือ กรมธรรม์) และระบุเลขหน้าหรือหัวข้อ เพื่อให้สมาชิกในทีมสามารถตรวจเทียบย้อนหลังได้
                 </p>
               </div>
 
@@ -1110,19 +1391,22 @@ export function PlanFormModal({
                   <label className="font-semibold text-slate-700 block mb-1">ประเภทเอกสาร</label>
                   <select
                     value={sourceType}
-                    onChange={(e) => setSourceType(e.target.value)}
+                    onChange={(e) => setSourceType(e.target.value as SourceType)}
                     className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl"
                   >
                     <option value="rate_sheet">ตารางอัตราเบี้ยประกันภัย (Rate Sheet)</option>
                     <option value="policy_schedule">ตารางกรมธรรม์ (Policy Schedule)</option>
                     <option value="brochure">โบรชัวร์เผยแพร่ (Brochure)</option>
                     <option value="endorsement">เอกสารแนบท้าย (Endorsement)</option>
+                    <option value="manual_note">บันทึกภายใน (Manual Note)</option>
                     <option value="other">เอกสารอื่น ๆ</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">ชื่อเอกสารอ้างอิง</label>
+                  <label className="font-semibold text-slate-700 block mb-1">
+                    ชื่อเอกสารอ้างอิง {workflowStatus === 'published' ? '*' : ''}
+                  </label>
                   <input
                     type="text"
                     placeholder="เช่น ตารางเบี้ยประกันภัยวิริยะ ซุปเปอร์โปรเทค 2569"
@@ -1149,8 +1433,8 @@ export function PlanFormModal({
           {/* Form Footer Actions */}
           <div className="flex items-center justify-between pt-4 border-t border-slate-100 shrink-0">
             <div className="flex items-center gap-1.5 text-slate-500 text-xs">
-              <span>แท็บปัจจุบัน:</span>
-              <span className="font-bold text-blue-700 uppercase">{activeTab}</span>
+              <span>ผู้บันทึก:</span>
+              <span className="font-bold text-slate-800">{userName}</span>
             </div>
 
             <div className="flex items-center gap-2">

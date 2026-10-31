@@ -1,20 +1,26 @@
 import { z } from 'zod';
 
 export const InsurerSchema = z.object({
-  name: z.string().min(1, 'กรุณากรอกชื่อบริษัทประกันภัย'),
+  name: z.string().trim().min(1, 'กรุณากรอกชื่อบริษัทประกันภัย'),
   contact_channels: z.string().optional().nullable(),
-  website: z.string().url('URL ไม่ถูกต้อง').optional().or(z.literal('')).nullable(),
+  website: z
+    .string()
+    .trim()
+    .url('รูปแบบ URL เว็บไซต์ไม่ถูกต้อง (ต้องขึ้นต้นด้วย http:// หรือ https://)')
+    .optional()
+    .or(z.literal(''))
+    .nullable(),
   is_active: z.boolean().default(true),
 });
 
 export const PlanSchema = z.object({
-  insurer_id: z.string().uuid('กรุณาเลือกบริษัทประกันภัย'),
-  name: z.string().min(1, 'กรุณากรอกชื่อแพ็กเกจประกัน'),
+  insurer_id: z.string().min(1, 'กรุณาเลือกบริษัทประกันภัย'),
+  name: z.string().trim().min(1, 'กรุณากรอกชื่อแพ็กเกจประกัน'),
   insurance_type: z.enum(['ชั้น 1', 'ชั้น 2+', 'ชั้น 3+', 'ชั้น 2', 'ชั้น 3']),
 });
 
 export const PlanVersionSchema = z.object({
-  plan_id: z.string().uuid(),
+  plan_id: z.string().min(1),
   version_no: z.number().int().positive('หมายเลขเวอร์ชันต้องมากกว่า 0'),
   effective_from: z.string().optional().nullable(),
   effective_to: z.string().optional().nullable(),
@@ -26,14 +32,14 @@ export const PlanVersionSchema = z.object({
   }
   return true;
 }, {
-  message: 'วันสิ้นสุดต้องไม่ก่อนวันเริ่มต้น',
+  message: 'วันสิ้นสุดผลบังคับใช้ต้องไม่ก่อนวันเริ่มต้น',
   path: ['effective_to']
 });
 
 export const EligibilityRuleSchema = z.object({
-  plan_version_id: z.string().uuid(),
+  plan_version_id: z.string().min(1),
   scope_type: z.enum(['specific_model', 'all_models', 'unknown']),
-  vehicle_model_id: z.string().uuid().optional().nullable(),
+  vehicle_model_id: z.string().min(1).optional().nullable(),
   min_age: z.number().int().min(0, 'อายุรถต้องไม่ติดลบ').optional().nullable(),
   max_age: z.number().int().min(0, 'อายุรถต้องไม่ติดลบ').optional().nullable(),
   age_basis: z.enum(['registration_year', 'manufacture_year']).optional().nullable(),
@@ -59,8 +65,8 @@ export const EligibilityRuleSchema = z.object({
 });
 
 export const PriceOptionSchema = z.object({
-  eligibility_rule_id: z.string().uuid(),
-  label: z.string().min(1, 'กรุณากรอกชื่อตัวเลือกราคา'),
+  eligibility_rule_id: z.string().min(1),
+  label: z.string().trim().min(1, 'กรุณากรอกชื่อตัวเลือกราคา'),
   repair_type: z.enum(['dealer', 'garage']),
   price_type: z.enum(['starting', 'indicative', 'fixed_for_conditions', 'unknown']),
   net_premium: z.number().min(0, 'เบี้ยสุทธิต้องไม่ติดลบ').optional().nullable(),
@@ -75,7 +81,7 @@ export const PriceOptionSchema = z.object({
   valid_from: z.string().optional().nullable(),
   valid_to: z.string().optional().nullable(),
 }).refine(data => {
-  if (data.sum_insured_min && data.sum_insured_max) {
+  if (data.sum_insured_min !== null && data.sum_insured_min !== undefined && data.sum_insured_max !== null && data.sum_insured_max !== undefined) {
     return data.sum_insured_max >= data.sum_insured_min;
   }
   return true;
@@ -85,9 +91,9 @@ export const PriceOptionSchema = z.object({
 });
 
 export const ReviewActionSchema = z.object({
-  plan_version_id: z.string().uuid(),
+  plan_version_id: z.string().min(1),
   action: z.enum(['publish', 'reject']),
-  reason: z.string().min(1, 'กรุณาระบุเหตุผลในการดำเนินการ'),
+  reason: z.string().trim().min(1, 'กรุณาระบุเหตุผลในการดำเนินการ'),
 });
 
 export const SearchQuerySchema = z.object({

@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { InsuranceSearchResultItem } from '@/types/insurance';
-import { Shield, CheckCircle2, AlertTriangle, FileText, ExternalLink, Plus, Check } from 'lucide-react';
+import { CoverageStatus } from '@/types/database';
+import { CheckCircle2, FileText, ExternalLink, Plus, Check, HelpCircle, MinusCircle } from 'lucide-react';
 
 interface PriceOptionCardProps {
   item: InsuranceSearchResultItem;
@@ -17,15 +18,24 @@ export function PriceOptionCard({
   onToggleCompare,
   canSelectMore,
 }: PriceOptionCardProps) {
+  const compulsoryText =
+    item.compulsoryIncluded === 'included'
+      ? 'รวม พ.ร.บ.'
+      : item.compulsoryIncluded === 'unspecified'
+      ? 'ยังไม่ระบุ พ.ร.บ.'
+      : 'ไม่รวม พ.ร.บ.';
+
   // Format price helper according to Section 9.3
   const renderPrice = () => {
     if (item.premiumTotal === null || item.premiumTotal === undefined) {
       return (
         <div className="flex flex-col">
-          <span className="text-sm font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+          <span className="text-sm font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 w-fit">
             ยังไม่มีข้อมูลราคา
           </span>
-          <span className="text-[11px] text-slate-400 mt-0.5">ต้องติดต่อบริษัทเพื่อเช็คเบี้ย</span>
+          <span className="text-[11px] text-slate-400 mt-0.5">
+            ต้องติดต่อบริษัทเพื่อเช็คเบี้ย • {compulsoryText}
+          </span>
         </div>
       );
     }
@@ -45,9 +55,48 @@ export function PriceOptionCard({
           {item.priceType === 'indicative' && (
             <span className="bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded font-medium">ราคาประมาณการ</span>
           )}
-          <span>{item.compulsoryIncluded === 'included' ? 'รวม พ.ร.บ.' : 'ไม่รวม พ.ร.บ.'}</span>
+          <span>{compulsoryText}</span>
         </div>
       </div>
+    );
+  };
+
+  // Section 9.5: Never render 'optional' or 'unknown' as 'ไม่คุ้มครอง'
+  const renderCoverageBadge = (
+    label: string,
+    status: CoverageStatus | undefined,
+    coveredClass = 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+  ) => {
+    const resolved = status ?? 'unknown';
+    if (resolved === 'covered') {
+      return (
+        <span className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded font-medium ${coveredClass}`}>
+          <CheckCircle2 className="w-3 h-3" />
+          {label}: คุ้มครอง
+        </span>
+      );
+    }
+    if (resolved === 'optional') {
+      return (
+        <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded font-medium bg-amber-50 text-amber-800 border border-amber-200">
+          <Plus className="w-3 h-3" />
+          {label}: ซื้อเพิ่มได้
+        </span>
+      );
+    }
+    if (resolved === 'unknown') {
+      return (
+        <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded font-medium bg-slate-50 text-slate-600 border border-slate-200">
+          <HelpCircle className="w-3 h-3" />
+          {label}: ยังไม่ระบุ
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded font-medium bg-slate-100 text-slate-500">
+        <MinusCircle className="w-3 h-3" />
+        {label}: ไม่คุ้มครอง
+      </span>
     );
   };
 
@@ -140,11 +189,11 @@ export function PriceOptionCard({
             )}
           </div>
           <span className="text-[11px] text-slate-500">
-            {item.scopeType === 'specific_model' ? (
-              `เฉพาะ ${item.vehicleBrand ?? ''} ${item.vehicleModel ?? ''}`
-            ) : (
-              `รองรับรถอายุ ${item.minCarAge ?? 1}-${item.maxCarAge ?? 10} ปี`
-            )}
+            {item.scopeType === 'specific_model'
+              ? `เฉพาะ ${item.vehicleBrand ?? ''} ${item.vehicleModel ?? ''}`.trim()
+              : item.scopeType === 'unknown'
+              ? 'ยังไม่ระบุขอบเขตรุ่นรถ'
+              : `รองรับรถอายุ ${item.minCarAge ?? 1}-${item.maxCarAge ?? 10} ปี`}
           </span>
         </div>
 
@@ -169,42 +218,9 @@ export function PriceOptionCard({
       {/* Quick Coverage Badges */}
       <div className="flex flex-wrap items-center gap-2 pt-3">
         <span className="text-[11px] text-slate-400 font-medium mr-1">ความคุ้มครองหลัก:</span>
-
-        {/* Own damage */}
-        <span
-          className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded font-medium ${
-            ownDamage?.status === 'covered'
-              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-              : 'bg-slate-100 text-slate-500'
-          }`}
-        >
-          <CheckCircle2 className="w-3 h-3" />
-          ชนตัวรถ: {ownDamage?.status === 'covered' ? 'คุ้มครอง' : 'ไม่คุ้มครอง'}
-        </span>
-
-        {/* Theft / Fire */}
-        <span
-          className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded font-medium ${
-            theftFire?.status === 'covered'
-              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-              : 'bg-slate-100 text-slate-500'
-          }`}
-        >
-          <CheckCircle2 className="w-3 h-3" />
-          รถหาย/ไฟไหม้: {theftFire?.status === 'covered' ? 'คุ้มครอง' : 'ไม่คุ้มครอง'}
-        </span>
-
-        {/* Flood */}
-        <span
-          className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded font-medium ${
-            flood?.status === 'covered'
-              ? 'bg-blue-50 text-blue-800 border border-blue-200'
-              : 'bg-slate-100 text-slate-500'
-          }`}
-        >
-          <CheckCircle2 className="w-3 h-3" />
-          น้ำท่วม: {flood?.status === 'covered' ? 'คุ้มครอง' : 'ไม่คุ้มครอง'}
-        </span>
+        {renderCoverageBadge('ชนตัวรถ', ownDamage?.status)}
+        {renderCoverageBadge('รถหาย/ไฟไหม้', theftFire?.status)}
+        {renderCoverageBadge('น้ำท่วม', flood?.status, 'bg-blue-50 text-blue-800 border border-blue-200')}
       </div>
 
       {/* Card Footer: Source document & Detail Link */}
