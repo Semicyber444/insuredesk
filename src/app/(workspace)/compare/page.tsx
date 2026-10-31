@@ -222,6 +222,13 @@ function CompareContent() {
     month: 'long',
     day: 'numeric',
   });
+  const validUntilDate = new Date(today);
+  validUntilDate.setDate(validUntilDate.getDate() + 30);
+  const validUntilThai = validUntilDate.toLocaleDateString('th-TH', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
   const quotationNo = `QT-${today.getFullYear() + 543}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}-${options[0]?.id.slice(-4) || '01'}`;
 
   return (
@@ -396,8 +403,8 @@ function CompareContent() {
               <span className="font-semibold text-slate-900">{dateFormattedThai}</span>
             </div>
             <div>
-              <span className="font-semibold text-slate-500">ราคาใช้ได้ถึง: </span>
-              <span className="font-semibold text-slate-900">31 ธันวาคม 2569 (หรือ 30 วัน)</span>
+              <span className="font-semibold text-slate-500">การยืนยันราคา: </span>
+              <span className="font-bold text-slate-900">30 วัน (ถึงวันที่ {validUntilThai})</span>
             </div>
           </div>
         </div>
@@ -440,9 +447,15 @@ function CompareContent() {
             {/* Table Header: Plan & Price Details */}
             <thead>
               <tr className="bg-slate-100/90 border-b-2 border-slate-300">
-                <th className="p-2 text-left font-bold text-slate-700 uppercase tracking-wider align-bottom border-r border-slate-300">
-                  <span className="block text-[11px] font-black text-slate-900">รายการเปรียบเทียบ</span>
-                  <span className="text-[9px] font-normal text-slate-500">ความคุ้มครองและเงื่อนไข</span>
+                <th className="p-3 text-center align-middle font-bold text-slate-700 uppercase tracking-wider border-r border-slate-300 bg-slate-50/70">
+                  <div className="flex flex-col items-center justify-center h-full space-y-1">
+                    <span className="block text-[11.5px] font-black text-slate-900">
+                      รายการเปรียบเทียบ
+                    </span>
+                    <span className="text-[9px] font-normal text-slate-500">
+                      ความคุ้มครองและเงื่อนไข
+                    </span>
+                  </div>
                 </th>
 
                 {options.map((opt, idx) => (
