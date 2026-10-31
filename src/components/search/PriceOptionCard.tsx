@@ -102,6 +102,7 @@ export function PriceOptionCard({
 
   // Find key coverage statuses
   const ownDamage = item.coverages.find((c) => c.code === 'own_damage');
+  const rollover = item.coverages.find((c) => c.code === 'rollover_offroad');
   const theftFire = item.coverages.find((c) => c.code === 'theft_fire');
   const flood = item.coverages.find((c) => c.code === 'flood');
 
@@ -219,6 +220,7 @@ export function PriceOptionCard({
       <div className="flex flex-wrap items-center gap-2 pt-3">
         <span className="text-[11px] text-slate-400 font-medium mr-1">ความคุ้มครองหลัก:</span>
         {renderCoverageBadge('ชนตัวรถ', ownDamage?.status)}
+        {renderCoverageBadge('พลิกคว่ำ/ตกทาง', rollover?.status)}
         {renderCoverageBadge('รถหาย/ไฟไหม้', theftFire?.status)}
         {renderCoverageBadge('น้ำท่วม', flood?.status, 'bg-blue-50 text-blue-800 border border-blue-200')}
       </div>

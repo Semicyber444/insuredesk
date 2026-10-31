@@ -14,20 +14,21 @@ import {
 
 export const MOCK_COVERAGE_TYPES: CoverageType[] = [
   { id: '10000000-0000-0000-0000-000000000001', code: 'own_damage', name: 'ความเสียหายต่อตัวรถยนต์ผู้เอาประกัน', category: 'ตัวรถยนต์', sort_order: 1 },
-  { id: '10000000-0000-0000-0000-000000000002', code: 'theft_fire', name: 'รถยนต์สูญหาย/ไฟไหม้', category: 'ตัวรถยนต์', sort_order: 2 },
-  { id: '10000000-0000-0000-0000-000000000003', code: 'flood', name: 'น้ำท่วม (ภัยธรรมชาติ)', category: 'ตัวรถยนต์', sort_order: 3 },
-  { id: '10000000-0000-0000-0000-000000000004', code: 'windshield', name: 'กระจกบังลมเสียหาย', category: 'ตัวรถยนต์', sort_order: 4 },
-  { id: '10000000-0000-0000-0000-000000000005', code: 'theft_personal_prop', name: 'ทรัพย์สินส่วนบุคคลภายในรถถูกโจรกรรม', category: 'ตัวรถยนต์', sort_order: 5 },
-  { id: '10000000-0000-0000-0000-000000000015', code: 'accessories', name: 'อุปกรณ์ตกแต่งเพิ่มเติม', category: 'ตัวรถยนต์', sort_order: 6 },
-  { id: '10000000-0000-0000-0000-000000000006', code: 'tp_life_person', name: 'ความรับผิดต่อชีวิต/ร่างกายบุคคลภายนอก (ต่อคน)', category: 'บุคคลภายนอก', sort_order: 7 },
-  { id: '10000000-0000-0000-0000-000000000007', code: 'tp_life_event', name: 'ความรับผิดต่อชีวิต/ร่างกายบุคคลภายนอก (ต่อครั้ง)', category: 'บุคคลภายนอก', sort_order: 8 },
-  { id: '10000000-0000-0000-0000-000000000008', code: 'tp_property', name: 'ความเสียหายต่อทรัพย์สินบุคคลภายนอก', category: 'บุคคลภายนอก', sort_order: 9 },
-  { id: '10000000-0000-0000-0000-000000000009', code: 'pa_driver_passenger', name: 'อุบัติเหตุส่วนบุคคล (ผู้ขับขี่และผู้โดยสาร)', category: 'เอกสารแนบท้าย', sort_order: 10 },
-  { id: '10000000-0000-0000-0000-000000000010', code: 'medical_expenses', name: 'ค่ารักษาพยาบาล', category: 'เอกสารแนบท้าย', sort_order: 11 },
-  { id: '10000000-0000-0000-0000-000000000011', code: 'bail_bond', name: 'การประกันตัวผู้ขับขี่', category: 'เอกสารแนบท้าย', sort_order: 12 },
-  { id: '10000000-0000-0000-0000-000000000012', code: 'roadside_assist', name: 'บริการช่วยเหลือฉุกเฉินบนท้องถนน 24 ชม.', category: 'บริการเสริม', sort_order: 13 },
-  { id: '10000000-0000-0000-0000-000000000013', code: 'towing', name: 'บริการยกรถ/ลากรถฉุกเฉิน', category: 'บริการเสริม', sort_order: 14 },
-  { id: '10000000-0000-0000-0000-000000000014', code: 'loss_of_use', name: 'เงินชดเชยค่าเดินทางระหว่างนำรถเข้าซ่อม', category: 'บริการเสริม', sort_order: 15 },
+  { id: '10000000-0000-0000-0000-000000000016', code: 'rollover_offroad', name: 'รถพลิกคว่ำหรือตกทาง', category: 'ตัวรถยนต์', sort_order: 2 },
+  { id: '10000000-0000-0000-0000-000000000002', code: 'theft_fire', name: 'รถยนต์สูญหาย/ไฟไหม้', category: 'ตัวรถยนต์', sort_order: 3 },
+  { id: '10000000-0000-0000-0000-000000000003', code: 'flood', name: 'น้ำท่วม (ภัยธรรมชาติ)', category: 'ตัวรถยนต์', sort_order: 4 },
+  { id: '10000000-0000-0000-0000-000000000004', code: 'windshield', name: 'กระจกบังลมเสียหาย', category: 'ตัวรถยนต์', sort_order: 5 },
+  { id: '10000000-0000-0000-0000-000000000005', code: 'theft_personal_prop', name: 'ทรัพย์สินส่วนบุคคลภายในรถถูกโจรกรรม', category: 'ตัวรถยนต์', sort_order: 6 },
+  { id: '10000000-0000-0000-0000-000000000015', code: 'accessories', name: 'อุปกรณ์ตกแต่งเพิ่มเติม', category: 'ตัวรถยนต์', sort_order: 7 },
+  { id: '10000000-0000-0000-0000-000000000006', code: 'tp_life_person', name: 'ความรับผิดต่อชีวิต/ร่างกายบุคคลภายนอก (ต่อคน)', category: 'บุคคลภายนอก', sort_order: 8 },
+  { id: '10000000-0000-0000-0000-000000000007', code: 'tp_life_event', name: 'ความรับผิดต่อชีวิต/ร่างกายบุคคลภายนอก (ต่อครั้ง)', category: 'บุคคลภายนอก', sort_order: 9 },
+  { id: '10000000-0000-0000-0000-000000000008', code: 'tp_property', name: 'ความเสียหายต่อทรัพย์สินบุคคลภายนอก', category: 'บุคคลภายนอก', sort_order: 10 },
+  { id: '10000000-0000-0000-0000-000000000009', code: 'pa_driver_passenger', name: 'อุบัติเหตุส่วนบุคคล (ผู้ขับขี่และผู้โดยสาร)', category: 'เอกสารแนบท้าย', sort_order: 11 },
+  { id: '10000000-0000-0000-0000-000000000010', code: 'medical_expenses', name: 'ค่ารักษาพยาบาล', category: 'เอกสารแนบท้าย', sort_order: 12 },
+  { id: '10000000-0000-0000-0000-000000000011', code: 'bail_bond', name: 'การประกันตัวผู้ขับขี่', category: 'เอกสารแนบท้าย', sort_order: 13 },
+  { id: '10000000-0000-0000-0000-000000000012', code: 'roadside_assist', name: 'บริการช่วยเหลือฉุกเฉินบนท้องถนน 24 ชม.', category: 'บริการเสริม', sort_order: 14 },
+  { id: '10000000-0000-0000-0000-000000000013', code: 'towing', name: 'บริการยกรถ/ลากรถฉุกเฉิน', category: 'บริการเสริม', sort_order: 15 },
+  { id: '10000000-0000-0000-0000-000000000014', code: 'loss_of_use', name: 'เงินชดเชยค่าเดินทางระหว่างนำรถเข้าซ่อม', category: 'บริการเสริม', sort_order: 16 },
 ];
 
 export const MOCK_INSURERS: Insurer[] = [
@@ -229,9 +230,11 @@ export const MOCK_VERSION_COVERAGES: VersionCoverage[] = [
   { id: 'vc-11', plan_version_id: '50000000-0000-0000-0000-000000000001', coverage_type_id: '10000000-0000-0000-0000-000000000013', status: 'covered', limit_amount: 1500, limit_basis: 'ต่อครั้ง (ระยะทางไม่เกิน 50 กม.)', deductible_amount: 0, terms: null, exclusions: null, created_at: '', updated_at: '' },
   { id: 'vc-12', plan_version_id: '50000000-0000-0000-0000-000000000001', coverage_type_id: '10000000-0000-0000-0000-000000000014', status: 'optional', limit_amount: 500, limit_basis: 'ต่อวัน สูงสุด 3 วัน', deductible_amount: 0, terms: 'ซื้อความคุ้มครองเสริมเพิ่ม 500 บาท', exclusions: null, created_at: '', updated_at: '' },
   { id: 'vc-13', plan_version_id: '50000000-0000-0000-0000-000000000001', coverage_type_id: '10000000-0000-0000-0000-000000000015', status: 'covered', limit_amount: 20000, limit_basis: 'ต่อครั้ง (ตามที่แจ้งไว้)', deductible_amount: 0, terms: 'คุ้มครองอุปกรณ์ตกแต่งตามมาตรฐานไม่เกิน 20,000 บาท', exclusions: null, created_at: '', updated_at: '' },
+  { id: 'vc-14', plan_version_id: '50000000-0000-0000-0000-000000000001', coverage_type_id: '10000000-0000-0000-0000-000000000016', status: 'covered', limit_amount: null, limit_basis: 'ตามทุนประกัน', deductible_amount: 0, terms: 'คุ้มครองกรณีรถพลิกคว่ำหรือตกข้างทาง', exclusions: null, created_at: '', updated_at: '' },
 
   // Plan 2 Coverages (2+)
   { id: 'vc-20', plan_version_id: '50000000-0000-0000-0000-000000000002', coverage_type_id: '10000000-0000-0000-0000-000000000001', status: 'covered', limit_amount: null, limit_basis: 'ตามทุนประกัน (ชนยานพาหนะทางบก)', deductible_amount: 0, terms: 'ต้องมีคู่กรณีเป็นยานพาหนะทางบกเท่านั้น', exclusions: 'ไม่คุ้มครองการชนสิ่งกีดขวาง/พลิกคว่ำเอง', created_at: '', updated_at: '' },
+  { id: 'vc-27', plan_version_id: '50000000-0000-0000-0000-000000000002', coverage_type_id: '10000000-0000-0000-0000-000000000016', status: 'not_covered', limit_amount: null, limit_basis: null, deductible_amount: 0, terms: null, exclusions: 'ไม่คุ้มครองกรณีรถพลิกคว่ำหรือตกทางโดยไม่มีคู่กรณี', created_at: '', updated_at: '' },
   { id: 'vc-21', plan_version_id: '50000000-0000-0000-0000-000000000002', coverage_type_id: '10000000-0000-0000-0000-000000000002', status: 'covered', limit_amount: null, limit_basis: 'ตามทุนประกัน', deductible_amount: 0, terms: null, exclusions: null, created_at: '', updated_at: '' },
   { id: 'vc-22', plan_version_id: '50000000-0000-0000-0000-000000000002', coverage_type_id: '10000000-0000-0000-0000-000000000003', status: 'covered', limit_amount: null, limit_basis: 'ตามทุนประกัน', deductible_amount: 0, terms: 'น้ำท่วมคุ้มครองตามทุน 2+', exclusions: null, created_at: '', updated_at: '' },
   { id: 'vc-23', plan_version_id: '50000000-0000-0000-0000-000000000002', coverage_type_id: '10000000-0000-0000-0000-000000000006', status: 'covered', limit_amount: 500000, limit_basis: 'ต่อคน', deductible_amount: 0, terms: null, exclusions: null, created_at: '', updated_at: '' },
@@ -246,9 +249,11 @@ export const MOCK_VERSION_COVERAGES: VersionCoverage[] = [
   { id: 'vc-33', plan_version_id: '50000000-0000-0000-0000-000000000003', coverage_type_id: '10000000-0000-0000-0000-000000000006', status: 'covered', limit_amount: 500000, limit_basis: 'ต่อคน', deductible_amount: 0, terms: null, exclusions: null, created_at: '', updated_at: '' },
   { id: 'vc-34', plan_version_id: '50000000-0000-0000-0000-000000000003', coverage_type_id: '10000000-0000-0000-0000-000000000008', status: 'covered', limit_amount: 1000000, limit_basis: 'ต่อครั้ง', deductible_amount: 0, terms: null, exclusions: null, created_at: '', updated_at: '' },
   { id: 'vc-35', plan_version_id: '50000000-0000-0000-0000-000000000003', coverage_type_id: '10000000-0000-0000-0000-000000000015', status: 'optional', limit_amount: 20000, limit_basis: 'ซื้อความคุ้มครองเสริม', deductible_amount: 0, terms: 'แจ้งเพิ่มเบี้ยตามมูลค่าอุปกรณ์ตกแต่ง', exclusions: null, created_at: '', updated_at: '' },
+  { id: 'vc-36', plan_version_id: '50000000-0000-0000-0000-000000000003', coverage_type_id: '10000000-0000-0000-0000-000000000016', status: 'not_covered', limit_amount: null, limit_basis: null, deductible_amount: 0, terms: null, exclusions: null, created_at: '', updated_at: '' },
 
   // Plan 4 Coverages (EV)
   { id: 'vc-40', plan_version_id: '50000000-0000-0000-0000-000000000004', coverage_type_id: '10000000-0000-0000-0000-000000000001', status: 'covered', limit_amount: null, limit_basis: 'ตามทุนประกัน รวมแบตเตอรี่ EV', deductible_amount: 0, terms: 'คุ้มครองแบตเตอรี่แรงดันสูงและสายชาร์จติดรถ', exclusions: null, created_at: '', updated_at: '' },
+  { id: 'vc-46', plan_version_id: '50000000-0000-0000-0000-000000000004', coverage_type_id: '10000000-0000-0000-0000-000000000016', status: 'covered', limit_amount: null, limit_basis: 'ตามทุนประกัน', deductible_amount: 0, terms: 'คุ้มครองกรณีรถพลิกคว่ำหรือตกข้างทาง', exclusions: null, created_at: '', updated_at: '' },
   { id: 'vc-41', plan_version_id: '50000000-0000-0000-0000-000000000004', coverage_type_id: '10000000-0000-0000-0000-000000000002', status: 'covered', limit_amount: null, limit_basis: 'ตามทุนประกัน', deductible_amount: 0, terms: null, exclusions: null, created_at: '', updated_at: '' },
   { id: 'vc-42', plan_version_id: '50000000-0000-0000-0000-000000000004', coverage_type_id: '10000000-0000-0000-0000-000000000003', status: 'covered', limit_amount: null, limit_basis: 'ตามทุนประกัน', deductible_amount: 0, terms: 'น้ำท่วมคุ้มครอง 100%', exclusions: null, created_at: '', updated_at: '' },
   { id: 'vc-43', plan_version_id: '50000000-0000-0000-0000-000000000004', coverage_type_id: '10000000-0000-0000-0000-000000000008', status: 'covered', limit_amount: 5000000, limit_basis: 'ต่อครั้ง', deductible_amount: 0, terms: null, exclusions: null, created_at: '', updated_at: '' },
@@ -257,6 +262,7 @@ export const MOCK_VERSION_COVERAGES: VersionCoverage[] = [
 
   // Plan 5 Coverages (3+ Muang Thai in_review)
   { id: 'vc-50', plan_version_id: '50000000-0000-0000-0000-000000000005', coverage_type_id: '10000000-0000-0000-0000-000000000001', status: 'covered', limit_amount: null, limit_basis: 'ตามทุนประกัน (ชนยานพาหนะทางบก)', deductible_amount: 0, terms: 'ต้องมีคู่กรณีเป็นยานพาหนะทางบก', exclusions: null, created_at: '', updated_at: '' },
+  { id: 'vc-56', plan_version_id: '50000000-0000-0000-0000-000000000005', coverage_type_id: '10000000-0000-0000-0000-000000000016', status: 'not_covered', limit_amount: null, limit_basis: null, deductible_amount: 0, terms: null, exclusions: null, created_at: '', updated_at: '' },
   { id: 'vc-51', plan_version_id: '50000000-0000-0000-0000-000000000005', coverage_type_id: '10000000-0000-0000-0000-000000000002', status: 'not_covered', limit_amount: null, limit_basis: null, deductible_amount: 0, terms: null, exclusions: null, created_at: '', updated_at: '' },
   { id: 'vc-52', plan_version_id: '50000000-0000-0000-0000-000000000005', coverage_type_id: '10000000-0000-0000-0000-000000000003', status: 'not_covered', limit_amount: null, limit_basis: null, deductible_amount: 0, terms: null, exclusions: null, created_at: '', updated_at: '' },
   { id: 'vc-53', plan_version_id: '50000000-0000-0000-0000-000000000005', coverage_type_id: '10000000-0000-0000-0000-000000000006', status: 'covered', limit_amount: 500000, limit_basis: 'ต่อคน', deductible_amount: 0, terms: null, exclusions: null, created_at: '', updated_at: '' },

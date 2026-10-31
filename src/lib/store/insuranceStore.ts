@@ -354,34 +354,70 @@ export class InsuranceStore {
   static getVersionCoverages(): VersionCoverage[] {
     const coverages = loadFromStorage(STORAGE_KEYS.COVERAGES, MOCK_VERSION_COVERAGES);
     const accType = MOCK_COVERAGE_TYPES.find((t) => t.code === 'accessories');
+    const rolloverType = MOCK_COVERAGE_TYPES.find((t) => t.code === 'rollover_offroad');
+    const standardNonType1MockVersionIds = new Set([
+      '50000000-0000-0000-0000-000000000002',
+      '50000000-0000-0000-0000-000000000003',
+      '50000000-0000-0000-0000-000000000005',
+    ]);
 
-    if (accType) {
+    if (accType || rolloverType) {
       let modified = false;
       const versions = this.getVersions();
       const plans = this.getPlans();
 
       for (const v of versions) {
-        const hasAcc = coverages.some(
-          (c) => c.plan_version_id === v.id && c.coverage_type_id === accType.id
-        );
-        if (!hasAcc) {
-          const plan = plans.find((p) => p.id === v.plan_id);
-          const isCovered =
-            !plan || plan.insurance_type === 'ชั้น 1' || plan.insurance_type.includes('2+');
-          coverages.push({
-            id: `vc-${v.id}-accessories`,
-            plan_version_id: v.id,
-            coverage_type_id: accType.id,
-            status: isCovered ? 'covered' : 'optional',
-            limit_amount: 20000,
-            limit_basis: 'ต่อครั้ง (ตามที่แจ้งไว้)',
-            deductible_amount: 0,
-            terms: 'คุ้มครองอุปกรณ์ตกแต่งตามที่แจ้งไว้ไม่เกิน 20,000 บาท',
-            exclusions: null,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          });
-          modified = true;
+        const plan = plans.find((p) => p.id === v.plan_id);
+        const isType1 = plan?.insurance_type === 'ชั้น 1';
+
+        if (accType) {
+          const hasAcc = coverages.some(
+            (c) => c.plan_version_id === v.id && c.coverage_type_id === accType.id
+          );
+          if (!hasAcc) {
+            const isCovered = !plan || isType1 || plan.insurance_type.includes('2+');
+            coverages.push({
+              id: `vc-${v.id}-accessories`,
+              plan_version_id: v.id,
+              coverage_type_id: accType.id,
+              status: isCovered ? 'covered' : 'optional',
+              limit_amount: 20000,
+              limit_basis: 'ต่อครั้ง (ตามที่แจ้งไว้)',
+              deductible_amount: 0,
+              terms: 'คุ้มครองอุปกรณ์ตกแต่งตามที่แจ้งไว้ไม่เกิน 20,000 บาท',
+              exclusions: null,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            });
+            modified = true;
+          }
+        }
+
+        if (rolloverType) {
+          const hasRollover = coverages.some(
+            (c) => c.plan_version_id === v.id && c.coverage_type_id === rolloverType.id
+          );
+          if (!hasRollover) {
+            const rolloverStatus: CoverageStatus = isType1
+              ? 'covered'
+              : standardNonType1MockVersionIds.has(v.id)
+              ? 'not_covered'
+              : 'unknown';
+            coverages.push({
+              id: `vc-${v.id}-rollover_offroad`,
+              plan_version_id: v.id,
+              coverage_type_id: rolloverType.id,
+              status: rolloverStatus,
+              limit_amount: null,
+              limit_basis: rolloverStatus === 'covered' ? 'ตามทุนประกัน' : null,
+              deductible_amount: 0,
+              terms: rolloverStatus === 'covered' ? 'คุ้มครองกรณีรถพลิกคว่ำหรือตกข้างทาง' : null,
+              exclusions: null,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            });
+            modified = true;
+          }
         }
       }
 
@@ -731,6 +767,9 @@ export class InsuranceStore {
 
         if (type.code === 'flood' || type.code === 'theft_fire' || type.code === 'own_damage') {
           status = isType1 || payload.insuranceType.includes('2+') ? 'covered' : 'not_covered';
+          if (status === 'covered') limitBasis = 'ตามทุนประกัน';
+        } else if (type.code === 'rollover_offroad') {
+          status = isType1 ? 'covered' : 'not_covered';
           if (status === 'covered') limitBasis = 'ตามทุนประกัน';
         } else if (type.code === 'windshield') {
           status = isType1 ? 'covered' : 'not_covered';

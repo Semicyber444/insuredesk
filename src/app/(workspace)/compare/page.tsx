@@ -319,11 +319,11 @@ function CompareContent() {
             page-break-after: auto !important;
           }
           th, td {
-            padding-top: 2px !important;
-            padding-bottom: 2px !important;
+            padding-top: 1.5px !important;
+            padding-bottom: 1.5px !important;
             padding-left: 5px !important;
             padding-right: 5px !important;
-            line-height: 1.15 !important;
+            line-height: 1.12 !important;
           }
         }
       `}} />

@@ -101,6 +101,14 @@ function buildCoveragePreset(type: InsuranceType): CoverageItemState[] {
       } else {
         status = 'not_covered';
       }
+    } else if (ct.code === 'rollover_offroad') {
+      if (isType1) {
+        status = 'covered';
+        limitBasis = 'ตามทุนประกัน';
+        terms = 'คุ้มครองกรณีรถพลิกคว่ำหรือตกข้างทาง';
+      } else {
+        status = 'not_covered';
+      }
     } else if (ct.code === 'theft_fire') {
       if (isType1 || is2Plus || isType2) {
         status = 'covered';
@@ -330,6 +338,12 @@ function buildInitialModalState(initialPlan: EditablePlanInput | null | undefine
           limitAmount = 20000;
           limitBasis = 'ต่อครั้ง (ตามที่แจ้งไว้)';
           terms = 'คุ้มครองอุปกรณ์ตกแต่งตามที่แจ้งไว้ไม่เกิน 20,000 บาท';
+        } else if (!found && ct.code === 'rollover_offroad') {
+          status = isType1 ? 'covered' : 'unknown';
+          if (isType1) {
+            limitBasis = 'ตามทุนประกัน';
+            terms = 'คุ้มครองกรณีรถพลิกคว่ำหรือตกข้างทาง';
+          }
         }
 
         return {
@@ -719,7 +733,7 @@ function PlanFormModalBody({
               <span>{initialPlan ? 'แก้ไขแพ็กเกจประกันภัย' : 'เพิ่มแพ็กเกจประกันภัยใหม่'}</span>
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              รองรับตารางหลายทุนและหลายเบี้ยในแพ็กเกจเดียวกัน (Multiple Price Tiers), เงื่อนไขรถ, ความคุ้มครอง 15 หมวดมาตรฐาน, และเอกสารต้นทาง
+              รองรับตารางหลายทุนและหลายเบี้ยในแพ็กเกจเดียวกัน (Multiple Price Tiers), เงื่อนไขรถ, ความคุ้มครอง {MOCK_COVERAGE_TYPES.length} หมวดมาตรฐาน, และเอกสารต้นทาง
             </p>
           </div>
           <button
@@ -838,7 +852,7 @@ function PlanFormModalBody({
                       if (
                         !initialPlan ||
                         confirm(
-                          `ต้องการรีเซ็ตตารางความคุ้มครอง 15 หมวดให้เป็นค่าเริ่มต้นของ "${newType}" หรือไม่? (กดยกเลิกเพื่อคงค่าที่ปรับแต่งไว้เดิม)`
+                          `ต้องการรีเซ็ตตารางความคุ้มครอง ${MOCK_COVERAGE_TYPES.length} หมวดให้เป็นค่าเริ่มต้นของ "${newType}" หรือไม่? (กดยกเลิกเพื่อคงค่าที่ปรับแต่งไว้เดิม)`
                         )
                       ) {
                         applyCoveragePreset(newType);

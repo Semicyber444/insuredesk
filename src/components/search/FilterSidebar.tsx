@@ -350,7 +350,7 @@ export function FilterSidebar({
         </div>
       </div>
 
-      {/* 7. All Required Coverages (Section 10.2: ALL 15 standard categories) */}
+      {/* 7. All Required Coverages (Section 10.2: ALL standard coverage categories) */}
       <div className="space-y-2 pt-2 border-t border-slate-100">
         <div className="flex items-center justify-between">
           <div>

@@ -102,7 +102,24 @@ describe('1. Search & Filtering Business Rules (Section 10)', () => {
     const ownDamage = coverages.find((c) => c.code === 'own_damage');
     expect(ownDamage?.isOverridden).toBe(true);
     expect(ownDamage?.deductibleAmount).toBe(3000);
-    expect(coverages.length).toBe(15);
+    expect(coverages.length).toBe(16);
+
+    const rollover = coverages.find((c) => c.code === 'rollover_offroad');
+    expect(rollover?.name).toBe('รถพลิกคว่ำหรือตกทาง');
+    expect(rollover?.category).toBe('ตัวรถยนต์');
+    expect(rollover?.status).toBe('covered');
+  });
+
+  it('should filter plans by rollover_offroad required coverage', async () => {
+    const resRollover = await searchInsuranceOptions({
+      requiredCoverageCodes: ['rollover_offroad'],
+    });
+    expect(resRollover.items.length).toBeGreaterThan(0);
+    expect(
+      resRollover.items.every(
+        (item) => item.coverages.find((c) => c.code === 'rollover_offroad')?.status === 'covered'
+      )
+    ).toBe(true);
   });
 });
 
