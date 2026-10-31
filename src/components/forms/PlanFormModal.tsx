@@ -267,16 +267,30 @@ export function PlanFormModal({
           // Load version coverages
           const vCoverages = InsuranceStore.getVersionCoverages().filter((vc) => vc.plan_version_id === latestVer.id);
           if (vCoverages.length > 0) {
+            const isType1 = (initialPlan.insurance_type || '') === 'ชั้น 1';
+            const is2Plus = (initialPlan.insurance_type || '').includes('2+');
             const mapped = MOCK_COVERAGE_TYPES.map((ct) => {
               const found = vCoverages.find((vc) => vc.coverage_type_id === ct.id);
+              let status: CoverageStatus = found?.status ?? 'unknown';
+              let limitAmount: number | string = found?.limit_amount ?? '';
+              let limitBasis = found?.limit_basis ?? '';
+              let terms = found?.terms ?? '';
+
+              if (!found && ct.code === 'accessories') {
+                status = isType1 || is2Plus ? 'covered' : 'optional';
+                limitAmount = 20000;
+                limitBasis = 'ต่อครั้ง (ตามที่แจ้งไว้)';
+                terms = 'คุ้มครองอุปกรณ์ตกแต่งตามที่แจ้งไว้ไม่เกิน 20,000 บาท';
+              }
+
               return {
                 code: ct.code,
                 name: ct.name,
                 category: ct.category,
-                status: found?.status ?? 'unknown',
-                limitAmount: found?.limit_amount ?? '',
-                limitBasis: found?.limit_basis ?? '',
-                terms: found?.terms ?? '',
+                status,
+                limitAmount,
+                limitBasis,
+                terms,
               };
             });
             setCoveragesState(mapped);
@@ -499,7 +513,7 @@ export function PlanFormModal({
               <span>{initialPlan ? 'แก้ไขแพ็กเกจประกันภัย' : 'เพิ่มแพ็กเกจประกันภัยใหม่'}</span>
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              รองรับตารางหลายทุนและหลายเบี้ยในแพ็กเกจเดียวกัน (Multiple Price Tiers), เงื่อนไขรถ, ความคุ้มครอง 14 หมวด, และเอกสารต้นทาง
+              รองรับตารางหลายทุนและหลายเบี้ยในแพ็กเกจเดียวกัน (Multiple Price Tiers), เงื่อนไขรถ, ความคุ้มครอง 15 หมวดมาตรฐาน, และเอกสารต้นทาง
             </p>
           </div>
           <button
