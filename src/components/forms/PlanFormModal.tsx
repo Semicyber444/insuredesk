@@ -152,6 +152,11 @@ export function PlanFormModal({
       } else if (ct.code === 'theft_personal_prop') {
         status = isType1 ? 'optional' : 'not_covered';
         if (status === 'optional') limitAmount = 20000;
+      } else if (ct.code === 'accessories') {
+        status = isType1 || is2Plus ? 'covered' : 'optional';
+        limitAmount = 20000;
+        limitBasis = 'ต่อครั้ง (ตามที่แจ้งไว้)';
+        terms = 'คุ้มครองอุปกรณ์ตกแต่งตามที่แจ้งไว้ไม่เกิน 20,000 บาท';
       } else if (ct.code === 'tp_life_person') {
         status = 'covered';
         limitAmount = 1000000;

@@ -153,7 +153,44 @@ export class InsuranceStore {
   }
 
   static getVersionCoverages(): VersionCoverage[] {
-    return loadFromStorage(STORAGE_KEYS.COVERAGES, MOCK_VERSION_COVERAGES);
+    const coverages = loadFromStorage(STORAGE_KEYS.COVERAGES, MOCK_VERSION_COVERAGES);
+    const accType = MOCK_COVERAGE_TYPES.find((t) => t.code === 'accessories');
+
+    if (accType) {
+      let modified = false;
+      const versions = this.getVersions();
+      const plans = this.getPlans();
+
+      for (const v of versions) {
+        const hasAcc = coverages.some(
+          (c) => c.plan_version_id === v.id && c.coverage_type_id === accType.id
+        );
+        if (!hasAcc) {
+          const plan = plans.find((p) => p.id === v.plan_id);
+          const isCovered = !plan || plan.insurance_type === 'ชั้น 1' || plan.insurance_type.includes('2+');
+          coverages.push({
+            id: `vc-${v.id}-accessories`,
+            plan_version_id: v.id,
+            coverage_type_id: accType.id,
+            status: isCovered ? 'covered' : 'optional',
+            limit_amount: 20000,
+            limit_basis: 'ต่อครั้ง (ตามที่แจ้งไว้)',
+            deductible_amount: 0,
+            terms: 'คุ้มครองอุปกรณ์ตกแต่งตามที่แจ้งไว้ไม่เกิน 20,000 บาท',
+            exclusions: null,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
+          modified = true;
+        }
+      }
+
+      if (modified) {
+        saveToStorage(STORAGE_KEYS.COVERAGES, coverages);
+      }
+    }
+
+    return coverages;
   }
 
   static getOverrides(): OptionCoverageOverride[] {
@@ -433,6 +470,10 @@ export class InsuranceStore {
         } else if (type.code === 'loss_of_use') {
           status = 'optional';
           limitBasis = 'ซื้อความคุ้มครองเสริม';
+        } else if (type.code === 'accessories') {
+          status = isType1 || payload.insuranceType.includes('2+') ? 'covered' : 'optional';
+          limitAmount = 20000;
+          limitBasis = 'ต่อครั้ง (ตามที่แจ้งไว้)';
         }
 
         cleanCoverages.push({
