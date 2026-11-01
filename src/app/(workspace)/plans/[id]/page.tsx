@@ -18,6 +18,8 @@ import {
   Check,
   Send,
   Lock,
+  ExternalLink,
+  Download,
 } from 'lucide-react';
 
 interface Props {
@@ -430,22 +432,54 @@ export default function PlanDetailPage({ params, searchParams }: Props) {
                 ยังไม่มีเอกสารอ้างอิงแนบในรุ่นนี้ (ต้องแนบอย่างน้อย 1 รายการก่อนอนุมัติเผยแพร่)
               </p>
             ) : (
-              docs.map((doc) => (
-                <div
-                  key={doc.id}
-                  className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs space-y-1"
-                >
-                  <div className="font-bold text-slate-800 line-clamp-1">{doc.title}</div>
-                  {doc.page_reference && (
-                    <div className="text-[11px] text-slate-500">จุดอ้างอิง: {doc.page_reference}</div>
-                  )}
-                  <div className="text-[10px] text-slate-400">
-                    ประเภท: {doc.source_type}
-                    {doc.storage_path ? ` • ไฟล์: ${doc.storage_path}` : ''}
-                    {doc.file_size ? ` (${(doc.file_size / 1024).toFixed(0)} KB)` : ''}
+              docs.map((doc) => {
+                const isUploadedFile = doc.source_url?.startsWith('/api/documents/');
+                return (
+                  <div
+                    key={doc.id}
+                    className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs space-y-2"
+                  >
+                    <div className="space-y-1">
+                      <div className="font-bold text-slate-800 line-clamp-1">{doc.title}</div>
+                      {doc.page_reference && (
+                        <div className="text-[11px] text-slate-500">
+                          จุดอ้างอิง: {doc.page_reference}
+                        </div>
+                      )}
+                      <div className="text-[10px] text-slate-400">
+                        ประเภท: {doc.source_type}
+                        {doc.storage_path ? ` • ไฟล์: ${doc.storage_path}` : ''}
+                        {doc.file_size
+                          ? ` (${Math.max(1, Math.round(doc.file_size / 1024))} KB)`
+                          : ''}
+                      </div>
+                    </div>
+
+                    {doc.source_url && (
+                      <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-200/70">
+                        <a
+                          href={doc.source_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:bg-blue-50 hover:border-blue-200 text-blue-700 font-bold text-[11px] transition"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          <span>เปิดดูเอกสาร</span>
+                        </a>
+                        {isUploadedFile && (
+                          <a
+                            href={`${doc.source_url}?download=1`}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-semibold text-[11px] transition"
+                          >
+                            <Download className="w-3 h-3" />
+                            <span>ดาวน์โหลด</span>
+                          </a>
+                        )}
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>

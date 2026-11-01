@@ -322,4 +322,29 @@ describe('4. Versioning, Workflow Persistence & Archive Rules (Section 8.1 & 12)
     expect(logs.some((l) => l.entity_id === v2.id && l.action === 'publish')).toBe(true);
     expect(logs.some((l) => l.entity_id === plan.id && l.action === 'archive')).toBe(true);
   });
+
+  it('should persist uploaded source document metadata (storage_path, source_url, file_size, mime_type)', async () => {
+    const { plan, version } = InsuranceStore.createOrUpdatePlan({
+      insurerId: '20000000-0000-0000-0000-000000000001',
+      name: 'Chubb 2+ Country Road',
+      insuranceType: 'ชั้น 2+',
+      workflowStatus: 'published',
+      sourceType: 'rate_sheet',
+      documentTitle: 'Chubb 2+ Country Road Rate Sheet',
+      documentRef: 'หน้า 1 ตารางอัตราเบี้ย',
+      documentStoragePath: 'storage/documents/1793498200-a1b2c3d4.pdf',
+      documentSourceUrl: '/api/documents/1793498200-a1b2c3d4.pdf',
+      documentFileSize: 512000,
+      documentMimeType: 'application/pdf',
+    });
+
+    const detail = await getPlanById(plan.id);
+    expect(detail?.versions.some((v) => v.id === version.id)).toBe(true);
+    const docs = InsuranceStore.getDocuments().filter((d) => d.plan_version_id === version.id);
+    expect(docs.length).toBe(1);
+    expect(docs[0].source_url).toBe('/api/documents/1793498200-a1b2c3d4.pdf');
+    expect(docs[0].storage_path).toBe('storage/documents/1793498200-a1b2c3d4.pdf');
+    expect(docs[0].file_size).toBe(512000);
+    expect(docs[0].mime_type).toBe('application/pdf');
+  });
 });

@@ -159,6 +159,10 @@ export interface CreateOrUpdatePlanPayload {
   sourceType?: SourceType;
   documentTitle?: string;
   documentRef?: string;
+  documentStoragePath?: string | null;
+  documentSourceUrl?: string | null;
+  documentFileSize?: number | null;
+  documentMimeType?: string | null;
 }
 
 export class InsuranceStore {
@@ -828,26 +832,49 @@ export class InsuranceStore {
     saveToStorage(STORAGE_KEYS.COVERAGES, cleanCoverages);
 
     // 6. Source Document (Update existing document for this version rather than duplicating)
-    if (payload.documentTitle && payload.documentTitle.trim()) {
+    const trimmedDocTitle = payload.documentTitle?.trim() || '';
+    const hasDocPayload =
+      trimmedDocTitle !== '' ||
+      Boolean(payload.documentStoragePath) ||
+      Boolean(payload.documentSourceUrl?.trim());
+
+    if (hasDocPayload) {
       const existingDocIdx = docs.findIndex((d) => d.plan_version_id === versionId);
+      const effectiveTitle = trimmedDocTitle || `${plan.name} (เอกสารอ้างอิง)`;
       if (existingDocIdx !== -1) {
+        const prevDoc = docs[existingDocIdx];
         docs[existingDocIdx] = {
-          ...docs[existingDocIdx],
-          source_type: payload.sourceType || docs[existingDocIdx].source_type || 'rate_sheet',
-          title: payload.documentTitle.trim(),
-          page_reference: payload.documentRef?.trim() || docs[existingDocIdx].page_reference,
+          ...prevDoc,
+          source_type: payload.sourceType || prevDoc.source_type || 'rate_sheet',
+          title: effectiveTitle,
+          page_reference:
+            payload.documentRef !== undefined
+              ? payload.documentRef.trim() || null
+              : prevDoc.page_reference,
+          storage_path:
+            payload.documentStoragePath !== undefined
+              ? payload.documentStoragePath || `documents/${planId}/${versionId}.pdf`
+              : prevDoc.storage_path,
+          source_url:
+            payload.documentSourceUrl !== undefined
+              ? payload.documentSourceUrl?.trim() || null
+              : prevDoc.source_url,
+          file_size:
+            payload.documentFileSize !== undefined ? payload.documentFileSize : prevDoc.file_size,
+          mime_type:
+            payload.documentMimeType !== undefined ? payload.documentMimeType : prevDoc.mime_type,
         };
       } else {
         docs.unshift({
           id: `doc-${Date.now()}`,
           plan_version_id: versionId,
           source_type: payload.sourceType || 'rate_sheet',
-          storage_path: `documents/${planId}/${versionId}.pdf`,
-          source_url: null,
-          title: payload.documentTitle.trim(),
-          file_size: 1048576,
-          mime_type: 'application/pdf',
-          page_reference: payload.documentRef?.trim() || 'หน้า 1 ตารางอัตราเบี้ย',
+          storage_path: payload.documentStoragePath || `documents/${planId}/${versionId}.pdf`,
+          source_url: payload.documentSourceUrl?.trim() || null,
+          title: effectiveTitle,
+          file_size: payload.documentFileSize ?? null,
+          mime_type: payload.documentMimeType ?? null,
+          page_reference: payload.documentRef?.trim() || null,
           received_at: todayStr,
           created_at: now,
           created_by: null,

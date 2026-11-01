@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import {
   Insurer,
   VehicleModel,
@@ -31,6 +31,11 @@ import {
   Layers,
   Copy,
   Trash2,
+  Upload,
+  FileText,
+  ExternalLink,
+  CheckCircle2,
+  Loader2,
 } from 'lucide-react';
 
 interface CoverageItemState {
@@ -248,6 +253,10 @@ function buildInitialModalState(initialPlan: EditablePlanInput | null | undefine
       documentTitle: '',
       documentRef: '',
       sourceType: 'rate_sheet' as SourceType,
+      documentStoragePath: null as string | null,
+      documentSourceUrl: '',
+      documentFileSize: null as number | null,
+      documentMimeType: null as string | null,
     };
   }
 
@@ -285,6 +294,10 @@ function buildInitialModalState(initialPlan: EditablePlanInput | null | undefine
   let documentTitle = '';
   let documentRef = '';
   let sourceType: SourceType = 'rate_sheet';
+  let documentStoragePath: string | null = null;
+  let documentSourceUrl = '';
+  let documentFileSize: number | null = null;
+  let documentMimeType: string | null = null;
 
   if (latestVer) {
     const rule = InsuranceStore.getEligibilityRules().find((r) => r.plan_version_id === latestVer.id);
@@ -364,6 +377,10 @@ function buildInitialModalState(initialPlan: EditablePlanInput | null | undefine
       documentTitle = docs[0].title;
       documentRef = docs[0].page_reference || '';
       sourceType = docs[0].source_type || 'rate_sheet';
+      documentStoragePath = docs[0].storage_path || null;
+      documentSourceUrl = docs[0].source_url || '';
+      documentFileSize = docs[0].file_size ?? null;
+      documentMimeType = docs[0].mime_type ?? null;
     }
   }
 
@@ -393,6 +410,10 @@ function buildInitialModalState(initialPlan: EditablePlanInput | null | undefine
     documentTitle,
     documentRef,
     sourceType,
+    documentStoragePath,
+    documentSourceUrl,
+    documentFileSize,
+    documentMimeType,
   };
 }
 
@@ -452,10 +473,86 @@ function PlanFormModalBody({
   const [documentTitle, setDocumentTitle] = useState(init.documentTitle);
   const [documentRef, setDocumentRef] = useState(init.documentRef);
   const [sourceType, setSourceType] = useState<SourceType>(init.sourceType);
+  const [documentStoragePath, setDocumentStoragePath] = useState<string | null>(
+    init.documentStoragePath
+  );
+  const [documentSourceUrl, setDocumentSourceUrl] = useState(init.documentSourceUrl);
+  const [documentFileSize, setDocumentFileSize] = useState<number | null>(init.documentFileSize);
+  const [documentMimeType, setDocumentMimeType] = useState<string | null>(init.documentMimeType);
+  const [uploadedOriginalName, setUploadedOriginalName] = useState('');
+  const [isUploadingFile, setIsUploadingFile] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [activeTab, setActiveTab] = useState<ModalTabId>('info');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+
+  const formatFileSize = (bytes: number | null | undefined) => {
+    if (!bytes || bytes <= 0) return '';
+    if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  };
+
+  const handleFileUpload = async (file: File) => {
+    setErrorMsg('');
+    if (file.size > 15 * 1024 * 1024) {
+      setErrorMsg('ขนาดไฟล์เกินกำหนด (สูงสุดไม่เกิน 15 MB)');
+      return;
+    }
+
+    setIsUploadingFile(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch('/api/documents/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = (await res.json()) as {
+        error?: string;
+        storagePath?: string;
+        sourceUrl?: string;
+        originalName?: string;
+        fileSize?: number;
+        mimeType?: string;
+      };
+
+      if (!res.ok || !data.sourceUrl || !data.storagePath) {
+        throw new Error(data.error || 'อัปโหลดไฟล์ไม่สำเร็จ');
+      }
+
+      setDocumentStoragePath(data.storagePath);
+      setDocumentSourceUrl(data.sourceUrl);
+      setDocumentFileSize(data.fileSize ?? file.size);
+      setDocumentMimeType(data.mimeType ?? file.type);
+      setUploadedOriginalName(data.originalName ?? file.name);
+
+      if (!documentTitle.trim()) {
+        const baseName = (data.originalName ?? file.name).replace(/\.[^.]+$/, '');
+        setDocumentTitle(baseName);
+      }
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : 'อัปโหลดเอกสารไม่สำเร็จ');
+    } finally {
+      setIsUploadingFile(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleClearUploadedFile = () => {
+    setDocumentStoragePath(null);
+    setDocumentSourceUrl('');
+    setDocumentFileSize(null);
+    setDocumentMimeType(null);
+    setUploadedOriginalName('');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   const applyCoveragePreset = (type: InsuranceType) => {
     setCoveragesState(buildCoveragePreset(type));
@@ -640,8 +737,19 @@ function PlanFormModalBody({
       ? 'in_review'
       : workflowStatus;
 
-    if (effectiveStatus === 'published' && !documentTitle.trim()) {
-      setErrorMsg('ตามกฎ Section 8.4 ต้องระบุชื่อเอกสารอ้างอิงต้นทางอย่างน้อย 1 รายการก่อนเผยแพร่');
+    const trimmedExternalUrl = documentSourceUrl.trim();
+    if (
+      trimmedExternalUrl &&
+      !trimmedExternalUrl.startsWith('/api/documents/') &&
+      !/^https?:\/\/.+/i.test(trimmedExternalUrl)
+    ) {
+      setErrorMsg('ลิงก์เอกสารภายนอกต้องขึ้นต้นด้วย http:// หรือ https://');
+      setActiveTab('document');
+      return;
+    }
+
+    if (effectiveStatus === 'published' && !documentTitle.trim() && !trimmedExternalUrl) {
+      setErrorMsg('ตามกฎ Section 8.4 ต้องระบุชื่อเอกสารหรืออัปโหลดไฟล์เอกสารต้นทางอย่างน้อย 1 รายการก่อนเผยแพร่');
       setActiveTab('document');
       return;
     }
@@ -707,6 +815,10 @@ function PlanFormModalBody({
         sourceType,
         documentTitle: documentTitle || undefined,
         documentRef: documentRef || undefined,
+        documentStoragePath,
+        documentSourceUrl: documentSourceUrl.trim() || null,
+        documentFileSize,
+        documentMimeType,
       });
 
       onSaved();
@@ -1396,8 +1508,129 @@ function PlanFormModalBody({
                   การอ้างอิงเอกสารต้นทาง (Section 8.4 & Section 13)
                 </p>
                 <p>
-                  ตามหลักการออกแบบ ทุกชุดข้อมูลที่เผยแพร่ต้องมีเอกสารอ้างอิงต้นทางอย่างน้อย 1 รายการ (Rate sheet, Brochure หรือ กรมธรรม์) และระบุเลขหน้าหรือหัวข้อ เพื่อให้สมาชิกในทีมสามารถตรวจเทียบย้อนหลังได้
+                  ตามหลักการออกแบบ ทุกชุดข้อมูลที่เผยแพร่ต้องมีเอกสารอ้างอิงต้นทางอย่างน้อย 1 รายการ (Rate sheet, Brochure หรือ กรมธรรม์) สามารถอัปโหลดไฟล์เอกสารเข้าสู่ระบบโดยตรง หรือระบุลิงก์อ้างอิงพร้อมเลขหน้าเพื่อให้สมาชิกในทีมตรวจเทียบย้อนหลังได้
                 </p>
+              </div>
+
+              {/* File Upload Zone / Attached File Preview */}
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1.5">
+                  ไฟล์เอกสารแนบ (PDF, รูปภาพ PNG/JPG/WEBP, หรือ Excel/CSV ไม่เกิน 15 MB)
+                </label>
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.png,.jpg,.jpeg,.webp,.xlsx,.xls,.csv"
+                  className="hidden"
+                  onChange={(e) => {
+                    const selected = e.target.files?.[0];
+                    if (selected) {
+                      void handleFileUpload(selected);
+                    }
+                  }}
+                />
+
+                {documentSourceUrl.startsWith('/api/documents/') ? (
+                  <div className="bg-emerald-50/70 border border-emerald-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                        <FileText className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 text-emerald-900 font-bold text-xs">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          <span className="truncate">
+                            {uploadedOriginalName || documentTitle || documentStoragePath}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-500 mt-0.5 flex flex-wrap items-center gap-2">
+                          {documentMimeType && (
+                            <span className="uppercase bg-white px-1.5 py-0.2 rounded border border-emerald-200 text-[10px] font-semibold text-emerald-800">
+                              {documentMimeType.split('/').pop()}
+                            </span>
+                          )}
+                          {documentFileSize ? <span>ขนาด {formatFileSize(documentFileSize)}</span> : null}
+                          <span className="text-emerald-700 font-medium">อัปโหลดพร้อมบันทึกแล้ว</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <a
+                        href={documentSourceUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-blue-700 font-bold text-xs transition"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        <span>เปิดดูไฟล์</span>
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isUploadingFile}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs transition cursor-pointer"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>เปลี่ยนไฟล์</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleClearUploadedFile}
+                        title="ลบไฟล์ที่แนบ"
+                        className="p-1.5 rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 transition cursor-pointer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setIsDragOver(true);
+                    }}
+                    onDragLeave={() => setIsDragOver(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setIsDragOver(false);
+                      const droppedFile = e.dataTransfer.files?.[0];
+                      if (droppedFile) {
+                        void handleFileUpload(droppedFile);
+                      }
+                    }}
+                    onClick={() => {
+                      if (!isUploadingFile) fileInputRef.current?.click();
+                    }}
+                    className={`border-2 border-dashed rounded-2xl p-6 text-center transition cursor-pointer ${
+                      isDragOver
+                        ? 'border-blue-500 bg-blue-50/70'
+                        : 'border-slate-300 bg-slate-50/50 hover:border-blue-400 hover:bg-blue-50/30'
+                    }`}
+                  >
+                    {isUploadingFile ? (
+                      <div className="flex flex-col items-center justify-center gap-2 py-2">
+                        <Loader2 className="w-7 h-7 text-blue-600 animate-spin" />
+                        <span className="font-bold text-blue-800 text-xs">
+                          กำลังอัปโหลดไฟล์เอกสารเข้าสู่เซิร์ฟเวอร์...
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center gap-1.5">
+                        <div className="w-10 h-10 rounded-2xl bg-blue-100/80 text-blue-600 flex items-center justify-center mb-1">
+                          <Upload className="w-5 h-5" />
+                        </div>
+                        <p className="font-bold text-slate-800 text-xs">
+                          คลิกเพื่อเลือกไฟล์ หรือลากไฟล์เอกสารมาวางที่นี่
+                        </p>
+                        <p className="text-[11px] text-slate-500">
+                          รองรับไฟล์ PDF, PNG, JPG, WEBP, XLSX, XLS, CSV (สูงสุดไม่เกิน 15 MB)
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1431,15 +1664,32 @@ function PlanFormModalBody({
                 </div>
               </div>
 
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">จุดอ้างอิง / เลขหน้าในเอกสาร</label>
-                <input
-                  type="text"
-                  placeholder="เช่น หน้า 3-5 ตารางเบี้ยรถกลุ่ม 3, 4"
-                  value={documentRef}
-                  onChange={(e) => setDocumentRef(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">จุดอ้างอิง / เลขหน้าในเอกสาร</label>
+                  <input
+                    type="text"
+                    placeholder="เช่น หน้า 3-5 ตารางเบี้ยรถกลุ่ม 3, 4"
+                    value={documentRef}
+                    onChange={(e) => setDocumentRef(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl"
+                  />
+                </div>
+
+                {!documentSourceUrl.startsWith('/api/documents/') && (
+                  <div>
+                    <label className="font-semibold text-slate-700 block mb-1">
+                      ลิงก์เอกสารภายนอก (ถ้าไม่ได้อัปโหลดไฟล์)
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="เช่น https://drive.google.com/..."
+                      value={documentSourceUrl}
+                      onChange={(e) => setDocumentSourceUrl(e.target.value)}
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl"
+                    />
+                  </div>
+                )}
               </div>
             </div>
           )}
