@@ -44,6 +44,10 @@ export const EligibilityRuleSchema = z.object({
   max_age: z.number().int().min(0, 'อายุรถต้องไม่ติดลบ').optional().nullable(),
   age_basis: z.enum(['registration_year', 'manufacture_year']).optional().nullable(),
   usage_type: z.enum(['private', 'commercial', 'all']).optional().nullable(),
+  registration_zone: z
+    .enum(['all', 'bangkok_only', 'bangkok_metro', 'upcountry_only'])
+    .optional()
+    .nullable(),
   inspection_required: z.boolean().optional().nullable(),
   notes: z.string().optional().nullable(),
 }).refine(data => {
@@ -105,6 +109,9 @@ export const SearchQuerySchema = z.object({
   vehicleModelId: z.string().optional(),
   carAge: z.number().optional(),
   usageType: z.string().optional(),
+  registrationPlate: z
+    .enum(['bangkok', 'metro', 'upcountry', 'bangkok_only_strict'])
+    .optional(),
   minPremium: z.number().optional(),
   maxPremium: z.number().optional(),
   minSumInsured: z.number().optional(),

@@ -1,4 +1,8 @@
-import { ComparisonWarning, InsuranceSearchResultItem } from '@/types/insurance';
+import {
+  ComparisonWarning,
+  InsuranceSearchResultItem,
+  formatRegistrationZoneLabel,
+} from '@/types/insurance';
 import { getBangkokDateString } from '@/lib/store/insuranceStore';
 import { buildSearchResultItems } from './search';
 
@@ -108,6 +112,21 @@ export function generateComparisonWarnings(options: InsuranceSearchResultItem[])
       message: hasSpecificDriver
         ? 'บางแพ็กเกจกำหนดอายุหรือชื่อผู้ขับขี่ หากผู้อื่นนำรถไปเกิดเหตุอาจมีเงื่อนไขค่าเสียหายส่วนแรกเพิ่ม'
         : 'ตัวเลือกที่นำมาเทียบมีเงื่อนไขอายุรถ รุ่นรถ หรือเงื่อนไขผู้ขับขี่แตกต่างกัน กรุณาตรวจสอบว่ารถลูกค้าเข้าเกณฑ์ทุกตัวเลือก',
+      severity: 'warning',
+    });
+  }
+
+  // 5b. Registration Plate Zone Restriction / Difference
+  const zoneSet = new Set(options.map((o) => o.registrationZone ?? 'all'));
+  const hasRestrictedZone = options.some((o) => (o.registrationZone ?? 'all') !== 'all');
+  if (hasRestrictedZone || zoneSet.size > 1) {
+    const zoneDesc = Array.from(zoneSet)
+      .map((z) => formatRegistrationZoneLabel(z))
+      .join(' / ');
+    warnings.push({
+      type: 'registration_zone_diff',
+      title: 'มีเงื่อนไขจำกัดเขตป้ายทะเบียนรถยนต์',
+      message: `แพ็กเกจที่เปรียบเทียบมีเงื่อนไขป้ายทะเบียน: ${zoneDesc} กรุณาตรวจสอบป้ายทะเบียนรถของลูกค้าก่อนเสนอขาย`,
       severity: 'warning',
     });
   }

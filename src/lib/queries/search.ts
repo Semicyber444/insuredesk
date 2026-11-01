@@ -1,7 +1,8 @@
 import {
   CoverageResolvedItem,
   InsuranceSearchResultItem,
-  SearchFilters
+  SearchFilters,
+  formatRegistrationZoneLabel,
 } from '@/types/insurance';
 import { InsuranceStore, getBangkokDateString } from '@/lib/store/insuranceStore';
 
@@ -148,6 +149,7 @@ export function buildSearchResultItems(): InsuranceSearchResultItem[] {
       maxCarAge: rule.max_age,
       ageBasis: rule.age_basis,
       usageType: rule.usage_type,
+      registrationZone: rule.registration_zone ?? 'all',
       inspectionRequired: rule.inspection_required,
 
       coverages,
@@ -169,7 +171,12 @@ export async function searchInsuranceOptions(filters: SearchFilters = {}) {
       const matchInsurer = item.insurerName.toLowerCase().includes(q);
       const matchPlan = item.planName.toLowerCase().includes(q);
       const matchLabel = item.priceOptionLabel.toLowerCase().includes(q);
-      const vehicleText = [item.vehicleBrand, item.vehicleModel, item.vehicleVariant]
+      const vehicleText = [
+        item.vehicleBrand,
+        item.vehicleModel,
+        item.vehicleVariant,
+        formatRegistrationZoneLabel(item.registrationZone),
+      ]
         .filter(Boolean)
         .join(' ')
         .toLowerCase();
@@ -227,10 +234,23 @@ export async function searchInsuranceOptions(filters: SearchFilters = {}) {
       }
     }
 
-    // 6. Usage Type
+    // 6. Usage Type & Registration Plate Zone
     if (filters.usageType && filters.usageType !== 'all') {
       if (item.usageType && item.usageType !== 'all' && item.usageType !== filters.usageType) {
         return false;
+      }
+    }
+
+    if (filters.registrationPlate) {
+      const zone = item.registrationZone ?? 'all';
+      if (filters.registrationPlate === 'bangkok_only_strict') {
+        if (zone !== 'bangkok_only') return false;
+      } else if (filters.registrationPlate === 'bangkok') {
+        if (zone === 'upcountry_only') return false;
+      } else if (filters.registrationPlate === 'metro') {
+        if (zone === 'bangkok_only' || zone === 'upcountry_only') return false;
+      } else if (filters.registrationPlate === 'upcountry') {
+        if (zone === 'bangkok_only' || zone === 'bangkok_metro') return false;
       }
     }
 

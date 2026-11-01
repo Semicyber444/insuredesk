@@ -118,6 +118,7 @@ create table if not exists public.eligibility_rules (
     age_basis text check (age_basis is null or age_basis in ('registration_year', 'manufacture_year')),
     usage_type text check (usage_type is null or usage_type in ('private', 'commercial', 'all')),
     inspection_required boolean,
+    registration_zone text default 'all' check (registration_zone is null or registration_zone in ('all', 'bangkok_only', 'bangkok_metro', 'upcountry_only')),
     notes text,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now(),

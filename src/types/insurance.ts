@@ -3,11 +3,31 @@ import {
   CompulsoryInclusion,
   InsuranceType,
   PriceType,
+  RegistrationZone,
   RepairType,
   ScopeType,
   SourceDocument,
   WorkflowStatus
 } from './database';
+
+export type PlateFilter = 'bangkok' | 'metro' | 'upcountry' | 'bangkok_only_strict';
+
+export function formatRegistrationZoneLabel(
+  zone?: RegistrationZone | null,
+  short = false
+): string {
+  switch (zone) {
+    case 'bangkok_only':
+      return short ? 'เฉพาะป้าย กทม.' : 'เฉพาะรถป้าย กทม. เท่านั้น';
+    case 'bangkok_metro':
+      return short ? 'เฉพาะป้าย กทม./ปริมณฑล' : 'เฉพาะรถป้าย กทม. และปริมณฑล';
+    case 'upcountry_only':
+      return short ? 'เฉพาะป้าย ตจว.' : 'เฉพาะรถป้ายต่างจังหวัด (ตจว.)';
+    case 'all':
+    default:
+      return short ? 'ทุกป้ายทะเบียน' : 'รับทุกป้ายทะเบียน (ทั่วประเทศ)';
+  }
+}
 
 export interface CoverageResolvedItem {
   coverageTypeId: string;
@@ -70,6 +90,7 @@ export interface InsuranceSearchResultItem {
   maxCarAge?: number | null;
   ageBasis?: 'registration_year' | 'manufacture_year' | null;
   usageType?: string | null;
+  registrationZone?: RegistrationZone | null;
   inspectionRequired?: boolean | null;
 
   // Resolved coverages for this price option
@@ -88,6 +109,7 @@ export interface SearchFilters {
   vehicleModelId?: string;
   carAge?: number;
   usageType?: string;
+  registrationPlate?: PlateFilter;
   minPremium?: number;
   maxPremium?: number;
   minSumInsured?: number;
@@ -100,7 +122,15 @@ export interface SearchFilters {
 }
 
 export interface ComparisonWarning {
-  type: 'sum_insured_diff' | 'repair_type_diff' | 'deductible_diff' | 'driver_diff' | 'price_type_diff' | 'unknown_data' | 'expired_price';
+  type:
+    | 'sum_insured_diff'
+    | 'repair_type_diff'
+    | 'deductible_diff'
+    | 'driver_diff'
+    | 'registration_zone_diff'
+    | 'price_type_diff'
+    | 'unknown_data'
+    | 'expired_price';
   title: string;
   message: string;
   severity: 'warning' | 'info' | 'caution';

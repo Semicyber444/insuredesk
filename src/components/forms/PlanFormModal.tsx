@@ -10,6 +10,7 @@ import {
   CoverageStatus,
   WorkflowStatus,
   ScopeType,
+  RegistrationZone,
   SourceType,
   CompulsoryInclusion,
 } from '@/types/database';
@@ -75,8 +76,9 @@ export interface EditablePlanInput {
 interface PlanFormModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (savedPlanId?: string) => void;
   initialPlan?: EditablePlanInput | null;
+  isCopyMode?: boolean;
 }
 
 type ModalTabId = 'info' | 'vehicle' | 'price' | 'coverages' | 'document';
@@ -206,7 +208,11 @@ function formatAutoLabel(repairType: RepairType, hasSumInsured: boolean, sumInsu
   return `${prefix} - ทุน ${Number(sumInsuredMax).toLocaleString('th-TH')}`;
 }
 
-function buildInitialModalState(initialPlan: EditablePlanInput | null | undefined, canPublish: boolean) {
+function buildInitialModalState(
+  initialPlan: EditablePlanInput | null | undefined,
+  canPublish: boolean,
+  isCopyMode = false
+) {
   const insList = InsuranceStore.getInsurers();
   const vehList = InsuranceStore.getVehicleModels();
   const defaultEffectiveFrom = getBangkokDateString(0);
@@ -246,6 +252,7 @@ function buildInitialModalState(initialPlan: EditablePlanInput | null | undefine
       minCarAge: 1 as number | string,
       maxCarAge: 10 as number | string,
       usageType: 'private' as 'private' | 'commercial' | 'all',
+      registrationZone: 'all' as RegistrationZone,
       inspectionRequired: false,
       ageBasis: 'registration_year' as 'registration_year' | 'manufacture_year',
       priceOptionsList: [defaultTier],
@@ -287,6 +294,7 @@ function buildInitialModalState(initialPlan: EditablePlanInput | null | undefine
   let minCarAge: number | string = 1;
   let maxCarAge: number | string = 10;
   let usageType: 'private' | 'commercial' | 'all' = 'private';
+  let registrationZone: RegistrationZone = 'all';
   let inspectionRequired = false;
   let ageBasis: 'registration_year' | 'manufacture_year' = 'registration_year';
   let priceOptionsList: PriceOptionItemState[] = [defaultTier];
@@ -307,6 +315,7 @@ function buildInitialModalState(initialPlan: EditablePlanInput | null | undefine
       minCarAge = rule.min_age ?? 1;
       maxCarAge = rule.max_age ?? 10;
       usageType = (rule.usage_type as 'private' | 'commercial' | 'all') || 'private';
+      registrationZone = rule.registration_zone || 'all';
       inspectionRequired = rule.inspection_required ?? false;
       ageBasis = rule.age_basis || 'registration_year';
 
@@ -315,7 +324,7 @@ function buildInitialModalState(initialPlan: EditablePlanInput | null | undefine
         priceOptionsList = options.map((o) => {
           const sumVal = o.sum_insured_max ?? o.sum_insured_min;
           return {
-            id: isPublishedOrArchived ? undefined : o.id,
+            id: isPublishedOrArchived || isCopyMode ? undefined : o.id,
             label: o.label || '',
             repairType: o.repair_type,
             priceType: o.price_type,
@@ -387,22 +396,27 @@ function buildInitialModalState(initialPlan: EditablePlanInput | null | undefine
   return {
     insList,
     vehList,
-    currentVersionId: latestVer?.id ?? null,
-    currentVersionNo: latestVer?.version_no ?? 1,
-    currentVersionStatus: (latestVer?.workflow_status ?? 'draft') as WorkflowStatus,
-    saveMode,
+    currentVersionId: isCopyMode ? null : (latestVer?.id ?? null),
+    currentVersionNo: isCopyMode ? 1 : (latestVer?.version_no ?? 1),
+    currentVersionStatus: (isCopyMode ? 'draft' : (latestVer?.workflow_status ?? 'draft')) as WorkflowStatus,
+    saveMode: isCopyMode ? ('new_version' as const) : saveMode,
     insurerId: initialPlan.insurer_id || insList[0]?.id || '',
-    name: initialPlan.name || '',
+    name: isCopyMode ? `${initialPlan.name} (สำเนา)` : initialPlan.name || '',
     insuranceType: initialPlan.insurance_type || 'ชั้น 1',
-    workflowStatus: resolvedWorkflowStatus,
+    workflowStatus: isCopyMode
+      ? ((canPublish ? 'published' : 'in_review') as 'draft' | 'in_review' | 'published')
+      : resolvedWorkflowStatus,
     effectiveFrom: latestVer?.effective_from || defaultEffectiveFrom,
     effectiveTo: latestVer?.effective_to || defaultEffectiveTo,
-    notes: latestVer?.notes || '',
+    notes: isCopyMode
+      ? `คัดลอกข้อมูลตั้งต้นจาก "${initialPlan.name}"`
+      : latestVer?.notes || '',
     scopeType,
     vehicleModelId,
     minCarAge,
     maxCarAge,
     usageType,
+    registrationZone,
     inspectionRequired,
     ageBasis,
     priceOptionsList,
@@ -417,15 +431,24 @@ function buildInitialModalState(initialPlan: EditablePlanInput | null | undefine
   };
 }
 
-export function PlanFormModal({ isOpen, onClose, onSaved, initialPlan }: PlanFormModalProps) {
+export function PlanFormModal({
+  isOpen,
+  onClose,
+  onSaved,
+  initialPlan,
+  isCopyMode = false,
+}: PlanFormModalProps) {
   if (!isOpen) return null;
 
   return (
     <PlanFormModalBody
-      key={`${initialPlan?.id ?? 'create'}-${initialPlan?.currentStatus ?? 'new'}`}
+      key={`${initialPlan?.id ?? 'create'}-${initialPlan?.currentStatus ?? 'new'}-${
+        isCopyMode ? 'copy' : 'edit'
+      }`}
       onClose={onClose}
       onSaved={onSaved}
       initialPlan={initialPlan}
+      isCopyMode={isCopyMode}
     />
   );
 }
@@ -434,11 +457,12 @@ function PlanFormModalBody({
   onClose,
   onSaved,
   initialPlan,
+  isCopyMode = false,
 }: Omit<PlanFormModalProps, 'isOpen'>) {
   const { userName, can } = useAuth();
   const canPublish = can('canPublish');
 
-  const [init] = useState(() => buildInitialModalState(initialPlan, canPublish));
+  const [init] = useState(() => buildInitialModalState(initialPlan, canPublish, isCopyMode));
 
   const insurers: Insurer[] = init.insList;
   const vehicles: VehicleModel[] = init.vehList;
@@ -462,6 +486,7 @@ function PlanFormModalBody({
   const [minCarAge, setMinCarAge] = useState<number | string>(init.minCarAge);
   const [maxCarAge, setMaxCarAge] = useState<number | string>(init.maxCarAge);
   const [usageType, setUsageType] = useState<'private' | 'commercial' | 'all'>(init.usageType);
+  const [registrationZone, setRegistrationZone] = useState<RegistrationZone>(init.registrationZone);
   const [inspectionRequired, setInspectionRequired] = useState(init.inspectionRequired);
   const [ageBasis, setAgeBasis] = useState<'registration_year' | 'manufacture_year'>(init.ageBasis);
 
@@ -690,6 +715,7 @@ function PlanFormModalBody({
       max_age: parsedMaxAge,
       age_basis: ageBasis,
       usage_type: usageType,
+      registration_zone: registrationZone,
       inspection_required: inspectionRequired,
     });
     if (!ruleParse.success) {
@@ -756,12 +782,15 @@ function PlanFormModalBody({
 
     setIsSubmitting(true);
 
+    const isEditingExistingPlan = Boolean(initialPlan) && !isCopyMode;
     const targetVersionId =
-      initialPlan && saveMode === 'update' && currentVersionId ? currentVersionId : undefined;
+      isEditingExistingPlan && saveMode === 'update' && currentVersionId
+        ? currentVersionId
+        : undefined;
 
     try {
-      InsuranceStore.createOrUpdatePlan({
-        planId: initialPlan?.id,
+      const saved = InsuranceStore.createOrUpdatePlan({
+        planId: isEditingExistingPlan ? initialPlan?.id : undefined,
         versionId: targetVersionId,
         insurerId,
         name,
@@ -771,7 +800,7 @@ function PlanFormModalBody({
         effectiveTo: effectiveTo || null,
         actorName: userName,
         notes:
-          saveMode === 'new_version' && initialPlan
+          saveMode === 'new_version' && isEditingExistingPlan
             ? notes || `ปรับปรุงข้อมูลจากรุ่นที่ ${currentVersionNo}`
             : notes,
         // Eligibility
@@ -781,13 +810,14 @@ function PlanFormModalBody({
         maxCarAge: parsedMaxAge,
         ageBasis,
         usageType,
+        registrationZone,
         inspectionRequired,
         // Price Options
         priceOptions: priceOptionsList.map((po) => {
           const premVal = po.hasPrice && po.premiumTotal !== '' ? Number(po.premiumTotal) : null;
           const sumVal = po.hasSumInsured && po.sumInsuredMax !== '' ? Number(po.sumInsuredMax) : null;
           return {
-            id: saveMode === 'new_version' ? undefined : po.id,
+            id: !isEditingExistingPlan || saveMode === 'new_version' ? undefined : po.id,
             label: po.label.trim() || formatAutoLabel(po.repairType, po.hasSumInsured, po.sumInsuredMax),
             repairType: po.repairType,
             priceType: premVal !== null ? po.priceType : 'unknown',
@@ -821,7 +851,7 @@ function PlanFormModalBody({
         documentMimeType,
       });
 
-      onSaved();
+      onSaved(saved.plan.id);
       onClose();
     } catch (err: unknown) {
       setErrorMsg(err instanceof Error ? err.message : 'บันทึกข้อมูลไม่สำเร็จ');
@@ -841,8 +871,18 @@ function PlanFormModalBody({
         <div className="flex items-center justify-between pb-4 border-b border-slate-100 shrink-0">
           <div>
             <h2 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-              <Layers className="w-5 h-5 text-blue-600" />
-              <span>{initialPlan ? 'แก้ไขแพ็กเกจประกันภัย' : 'เพิ่มแพ็กเกจประกันภัยใหม่'}</span>
+              {isCopyMode ? (
+                <Copy className="w-5 h-5 text-emerald-600" />
+              ) : (
+                <Layers className="w-5 h-5 text-blue-600" />
+              )}
+              <span>
+                {isCopyMode
+                  ? 'คัดลอกเพื่อสร้างแพ็กเกจใหม่'
+                  : initialPlan
+                  ? 'แก้ไขแพ็กเกจประกันภัย'
+                  : 'เพิ่มแพ็กเกจประกันภัยใหม่'}
+              </span>
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
               รองรับตารางหลายทุนและหลายเบี้ยในแพ็กเกจเดียวกัน (Multiple Price Tiers), เงื่อนไขรถ, ความคุ้มครอง {MOCK_COVERAGE_TYPES.length} หมวดมาตรฐาน, และเอกสารต้นทาง
@@ -895,7 +935,22 @@ function PlanFormModalBody({
           {/* TAB 1: General Info */}
           {activeTab === 'info' && (
             <div className="space-y-4">
-              {initialPlan && (
+              {isCopyMode && initialPlan && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 text-xs text-emerald-950 flex items-start gap-2.5">
+                  <Copy className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block">
+                      กำลังสร้างแพ็กเกจใหม่โดยคัดลอกจาก &quot;{initialPlan.name}&quot;
+                    </span>
+                    <span className="text-[11px] text-emerald-800">
+                      ดึงข้อมูลเงื่อนไขรถ ตัวเลือกราคา ความคุ้มครองทั้ง 16 หมวด และเอกสารอ้างอิงมาให้ครบแล้ว
+                      สามารถแก้ชื่อแพ็กเกจ ปรับเงื่อนไขป้ายทะเบียน หรือราคาแล้วกดบันทึกเป็นแพ็กเกจใหม่ได้ทันที
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {initialPlan && !isCopyMode && (
                 <div className="bg-blue-50 border border-blue-200 rounded-xl p-3.5 space-y-2">
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-bold text-blue-950 flex items-center gap-1.5">
@@ -1132,17 +1187,33 @@ function PlanFormModalBody({
                   </select>
                 </div>
 
-                <div className="flex items-center pt-6">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={inspectionRequired}
-                      onChange={(e) => setInspectionRequired(e.target.checked)}
-                      className="rounded text-blue-600 focus:ring-blue-500"
-                    />
-                    <span className="font-semibold text-slate-700">ต้องตรวจสภาพรถก่อนทำประกัน</span>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">
+                    เงื่อนไขเขตป้ายทะเบียนรถ
                   </label>
+                  <select
+                    value={registrationZone}
+                    onChange={(e) => setRegistrationZone(e.target.value as RegistrationZone)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="all">รับทุกป้ายทะเบียน (ทั่วประเทศ)</option>
+                    <option value="bangkok_only">เฉพาะรถป้าย กทม. เท่านั้น</option>
+                    <option value="bangkok_metro">เฉพาะรถป้าย กทม. และปริมณฑล</option>
+                    <option value="upcountry_only">เฉพาะรถป้ายต่างจังหวัด (ตจว.)</option>
+                  </select>
                 </div>
+              </div>
+
+              <div className="pt-1">
+                <label className="inline-flex items-center gap-2 cursor-pointer bg-slate-50 border border-slate-200 px-3.5 py-2.5 rounded-xl">
+                  <input
+                    type="checkbox"
+                    checked={inspectionRequired}
+                    onChange={(e) => setInspectionRequired(e.target.checked)}
+                    className="rounded text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="font-semibold text-slate-700">ต้องตรวจสภาพรถก่อนทำประกัน</span>
+                </label>
               </div>
             </div>
           )}

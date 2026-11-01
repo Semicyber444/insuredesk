@@ -1,8 +1,8 @@
 'use client';
 
-import { SearchFilters } from '@/types/insurance';
+import { SearchFilters, PlateFilter } from '@/types/insurance';
 import { Insurer, VehicleModel, CoverageType, InsuranceType, RepairType } from '@/types/database';
-import { Filter, RotateCcw, Search } from 'lucide-react';
+import { Filter, RotateCcw, Search, MapPin } from 'lucide-react';
 
 interface FilterSidebarProps {
   filters: SearchFilters;
@@ -263,6 +263,30 @@ export function FilterSidebar({
               <option value="commercial">เชิงพาณิชย์</option>
             </select>
           </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold text-slate-700 flex items-center gap-1">
+            <MapPin className="w-3.5 h-3.5 text-blue-600" />
+            <span>ป้ายทะเบียนรถ</span>
+          </label>
+          <select
+            value={filters.registrationPlate ?? ''}
+            onChange={(e) =>
+              onFilterChange({
+                ...filters,
+                registrationPlate: (e.target.value || undefined) as PlateFilter | undefined,
+                page: 1,
+              })
+            }
+            className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">ทุกป้ายทะเบียน / ไม่ระบุ</option>
+            <option value="bangkok">รถป้าย กทม. (แสดงแผนที่รับรถ กทม.)</option>
+            <option value="metro">รถป้ายปริมณฑล</option>
+            <option value="upcountry">รถป้ายต่างจังหวัด (ตจว.)</option>
+            <option value="bangkok_only_strict">ดูเฉพาะแผนจำกัดป้าย กทม. เท่านั้น</option>
+          </select>
         </div>
       </div>
 

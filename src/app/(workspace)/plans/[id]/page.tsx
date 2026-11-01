@@ -2,17 +2,21 @@
 
 import { useState, useEffect, use, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { getPlanById, PlanDetailData, submitForReview } from '@/lib/queries/plans';
 import { resolveCoverages } from '@/lib/queries/search';
 import { InsuranceStore } from '@/lib/store/insuranceStore';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { PlanFormModal } from '@/components/forms/PlanFormModal';
+import { formatRegistrationZoneLabel } from '@/types/insurance';
 import {
   ArrowLeft,
   FileText,
   History,
   Car,
   Edit3,
+  Copy,
+  MapPin,
   Columns3,
   Plus,
   Check,
@@ -35,12 +39,14 @@ export default function PlanDetailPage({ params, searchParams }: Props) {
   const initialOptionId = resolvedSearchParams.optionId;
 
   const { activeRole, userName, can } = useAuth();
+  const router = useRouter();
 
   const [plan, setPlan] = useState<PlanDetailData | null>(null);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
   const [compareBasket, setCompareBasket] = useState<string[]>([]);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isCopyMode, setIsCopyMode] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   const reloadData = useCallback(() => {
@@ -203,6 +209,12 @@ export default function PlanDetailPage({ params, searchParams }: Props) {
                   จัดเก็บเข้ากรุแล้ว (Archived)
                 </span>
               )}
+              {rules[0]?.registration_zone && rules[0].registration_zone !== 'all' && (
+                <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-300">
+                  <MapPin className="w-3 h-3 text-amber-700" />
+                  {formatRegistrationZoneLabel(rules[0].registration_zone)}
+                </span>
+              )}
             </div>
             <h1 className="text-2xl font-black text-slate-900 tracking-tight">{plan.name}</h1>
             <p className="text-xs text-slate-500 mt-1">
@@ -231,14 +243,30 @@ export default function PlanDetailPage({ params, searchParams }: Props) {
             )}
 
             {can('canEditDraft') && (
-              <button
-                type="button"
-                onClick={() => setIsEditModalOpen(true)}
-                className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer"
-              >
-                <Edit3 className="w-3.5 h-3.5 text-blue-600" />
-                <span>แก้ไขข้อมูลแพ็กเกจ</span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsCopyMode(false);
+                    setIsEditModalOpen(true);
+                  }}
+                  className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+                >
+                  <Edit3 className="w-3.5 h-3.5 text-blue-600" />
+                  <span>แก้ไขข้อมูลแพ็กเกจ</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsCopyMode(true);
+                    setIsEditModalOpen(true);
+                  }}
+                  className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+                >
+                  <Copy className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>คัดลอกแพ็กเกจ</span>
+                </button>
+              </>
             )}
 
             {selectedOption && activeVersion?.workflow_status === 'published' && (
@@ -357,6 +385,21 @@ export default function PlanDetailPage({ params, searchParams }: Props) {
                     </div>
                     <div className="text-slate-600">
                       อายุรถ: {r.min_age ?? 1} - {r.max_age ?? 10} ปี ({ageBasisThai})
+                    </div>
+                    <div className="flex items-center flex-wrap gap-1.5 text-slate-600">
+                      <span>ป้ายทะเบียน:</span>
+                      <span
+                        className={
+                          r.registration_zone && r.registration_zone !== 'all'
+                            ? 'inline-flex items-center gap-1 font-bold text-amber-900 bg-amber-100/80 border border-amber-200 px-2 py-0.5 rounded-md text-[11px]'
+                            : 'font-medium text-slate-700'
+                        }
+                      >
+                        {r.registration_zone && r.registration_zone !== 'all' && (
+                          <MapPin className="w-3 h-3 text-amber-700" />
+                        )}
+                        {formatRegistrationZoneLabel(r.registration_zone)}
+                      </span>
                     </div>
                     <div className="text-slate-600">
                       ตรวจสภาพรถ:{' '}
@@ -588,12 +631,24 @@ export default function PlanDetailPage({ params, searchParams }: Props) {
         </div>
       </div>
 
-      {/* Edit Modal */}
+      {/* Edit / Copy Modal */}
       <PlanFormModal
         isOpen={isEditModalOpen}
-        onClose={() => setIsEditModalOpen(false)}
-        onSaved={reloadData}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setIsCopyMode(false);
+        }}
+        onSaved={(savedPlanId) => {
+          const copied = isCopyMode;
+          setIsCopyMode(false);
+          if (copied && savedPlanId) {
+            router.push(`/plans/${savedPlanId}`);
+          } else {
+            reloadData();
+          }
+        }}
         initialPlan={plan}
+        isCopyMode={isCopyMode}
       />
     </div>
   );

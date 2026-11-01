@@ -13,8 +13,15 @@ export type RepairType = 'dealer' | 'garage';
 export type PriceType = 'starting' | 'indicative' | 'fixed_for_conditions' | 'unknown';
 export type CoverageStatus = 'covered' | 'not_covered' | 'optional' | 'unknown';
 export type ScopeType = 'specific_model' | 'all_models' | 'unknown';
+export type RegistrationZone = 'all' | 'bangkok_only' | 'bangkok_metro' | 'upcountry_only';
 export type CompulsoryInclusion = 'included' | 'excluded' | 'unspecified';
-export type SourceType = 'policy_schedule' | 'rate_sheet' | 'brochure' | 'endorsement' | 'other';
+export type SourceType =
+  | 'policy_schedule'
+  | 'rate_sheet'
+  | 'brochure'
+  | 'endorsement'
+  | 'manual_note'
+  | 'other';
 
 export interface Profile {
   user_id: string;
@@ -92,6 +99,7 @@ export interface EligibilityRule {
   max_age?: number | null;
   age_basis?: 'registration_year' | 'manufacture_year' | null;
   usage_type?: 'private' | 'commercial' | 'all' | null;
+  registration_zone?: RegistrationZone | null;
   inspection_required?: boolean | null;
   notes?: string | null;
   created_at: string;

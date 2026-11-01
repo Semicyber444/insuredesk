@@ -13,6 +13,7 @@ import {
   InsuranceType,
   WorkflowStatus,
   ScopeType,
+  RegistrationZone,
   RepairType,
   PriceType,
   CompulsoryInclusion,
@@ -119,6 +120,7 @@ export interface CreateOrUpdatePlanPayload {
   maxCarAge?: number | null;
   ageBasis?: 'registration_year' | 'manufacture_year' | null;
   usageType?: 'private' | 'commercial' | 'all' | null;
+  registrationZone?: RegistrationZone | null;
   inspectionRequired?: boolean;
   // Price Options (supports multiple tiers for same plan)
   priceOptions?: {
@@ -658,6 +660,10 @@ export class InsuranceStore {
       max_age: payload.maxCarAge ?? 10,
       age_basis: payload.ageBasis !== undefined ? payload.ageBasis : existingRule?.age_basis ?? 'registration_year',
       usage_type: payload.usageType || 'private',
+      registration_zone:
+        payload.registrationZone !== undefined
+          ? payload.registrationZone ?? 'all'
+          : existingRule?.registration_zone ?? 'all',
       inspection_required: payload.inspectionRequired ?? false,
       notes:
         resolvedScope === 'specific_model'
@@ -1000,5 +1006,90 @@ export class InsuranceStore {
       created_at: new Date().toISOString(),
     });
     saveToStorage(STORAGE_KEYS.AUDIT, auditLogs);
+  }
+
+  static duplicatePlan(
+    sourcePlanId: string,
+    actorName = 'ผู้ใช้งาน'
+  ): { plan: Plan; version: PlanVersion } {
+    const plans = this.getPlans();
+    const sourcePlan = plans.find((p) => p.id === sourcePlanId);
+    if (!sourcePlan) {
+      throw new Error('ไม่พบแพ็กเกจต้นฉบับที่ต้องการคัดลอก');
+    }
+
+    const versions = this.getVersions()
+      .filter((v) => v.plan_id === sourcePlanId)
+      .sort((a, b) => b.version_no - a.version_no);
+    const sourceVer = versions.find((v) => v.workflow_status === 'published') ?? versions[0];
+
+    const sourceRule = sourceVer
+      ? this.getEligibilityRules().find((r) => r.plan_version_id === sourceVer.id)
+      : undefined;
+    const sourceOptions = sourceRule
+      ? this.getPriceOptions().filter((o) => o.eligibility_rule_id === sourceRule.id)
+      : [];
+    const sourceCoverages = sourceVer
+      ? this.getVersionCoverages().filter((c) => c.plan_version_id === sourceVer.id)
+      : [];
+    const sourceDoc = sourceVer
+      ? this.getDocuments().find((d) => d.plan_version_id === sourceVer.id)
+      : undefined;
+
+    const coverageTypes = this.getCoverageTypes();
+
+    return this.createOrUpdatePlan({
+      insurerId: sourcePlan.insurer_id,
+      name: `${sourcePlan.name} (สำเนา)`,
+      insuranceType: sourcePlan.insurance_type,
+      workflowStatus: 'draft',
+      effectiveFrom: sourceVer?.effective_from ?? getBangkokDateString(0),
+      effectiveTo: sourceVer?.effective_to ?? getBangkokDateString(365),
+      notes: `คัดลอกข้อมูลตั้งต้นจาก "${sourcePlan.name}"`,
+      actorName,
+      scopeType: sourceRule?.scope_type ?? 'all_models',
+      vehicleModelId: sourceRule?.vehicle_model_id ?? null,
+      minCarAge: sourceRule?.min_age ?? 1,
+      maxCarAge: sourceRule?.max_age ?? 10,
+      ageBasis: sourceRule?.age_basis ?? 'registration_year',
+      usageType: sourceRule?.usage_type ?? 'private',
+      registrationZone: sourceRule?.registration_zone ?? 'all',
+      inspectionRequired: sourceRule?.inspection_required ?? false,
+      priceOptions: sourceOptions.map((o) => ({
+        label: o.label,
+        repairType: o.repair_type,
+        priceType: o.price_type,
+        premiumTotal: o.premium_total,
+        sumInsuredMin: o.sum_insured_min,
+        sumInsuredMax: o.sum_insured_max,
+        deductibleAmount: o.deductible_amount,
+        deductibleTerms: o.deductible_terms ?? undefined,
+        driverConditions: o.driver_conditions ?? undefined,
+        compulsoryIncluded: o.compulsory_included,
+        validFrom: o.valid_from,
+        validTo: o.valid_to,
+      })),
+      coverages: sourceCoverages
+        .map((vc) => {
+          const ct = coverageTypes.find((t) => t.id === vc.coverage_type_id);
+          if (!ct) return null;
+          return {
+            code: ct.code,
+            status: vc.status,
+            limitAmount: vc.limit_amount ?? null,
+            limitBasis: vc.limit_basis ?? undefined,
+            terms: vc.terms ?? undefined,
+            exclusions: vc.exclusions ?? undefined,
+          };
+        })
+        .filter((x): x is NonNullable<typeof x> => x !== null),
+      sourceType: sourceDoc?.source_type,
+      documentTitle: sourceDoc?.title,
+      documentRef: sourceDoc?.page_reference ?? undefined,
+      documentStoragePath: sourceDoc?.storage_path ?? null,
+      documentSourceUrl: sourceDoc?.source_url ?? null,
+      documentFileSize: sourceDoc?.file_size ?? null,
+      documentMimeType: sourceDoc?.mime_type ?? null,
+    });
   }
 }

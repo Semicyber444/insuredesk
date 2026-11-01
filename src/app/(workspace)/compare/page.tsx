@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { getComparisonData, ComparisonResult } from '@/lib/queries/compare';
 import { InsuranceStore } from '@/lib/store/insuranceStore';
 import { useAuth } from '@/lib/auth/AuthContext';
-import { InsuranceSearchResultItem } from '@/types/insurance';
+import { InsuranceSearchResultItem, formatRegistrationZoneLabel } from '@/types/insurance';
 import {
   Columns3,
   AlertTriangle,
@@ -125,9 +125,16 @@ function CompareContent() {
   const isDiffDeductible = new Set(options.map((o) => o.deductibleAmount ?? 0)).size > 1;
   const isDiffCompulsory = new Set(options.map((o) => o.compulsoryIncluded)).size > 1;
   const isDiffDriver = new Set(options.map((o) => o.driverConditions || 'ไม่จำกัดชื่อผู้ขับขี่')).size > 1;
+  const hasPlateRestriction = options.some((o) => (o.registrationZone ?? 'all') !== 'all');
   const isDiffCarAge =
-    new Set(options.map((o) => `${o.scopeType}:${o.vehicleModelId ?? ''}:${o.minCarAge ?? 1}-${o.maxCarAge ?? 10}`))
-      .size > 1;
+    new Set(
+      options.map(
+        (o) =>
+          `${o.scopeType}:${o.vehicleModelId ?? ''}:${o.minCarAge ?? 1}-${o.maxCarAge ?? 10}:${
+            o.registrationZone ?? 'all'
+          }`
+      )
+    ).size > 1;
 
   interface CoreSpecRow {
     id: string;
@@ -202,17 +209,30 @@ function CompareContent() {
     },
     {
       id: 'vehicle_conditions',
-      label: 'เงื่อนไขอายุและรุ่นรถ',
+      label: 'เงื่อนไขอายุ รุ่นรถ และป้ายทะเบียน',
       hasDifference: isDiffCarAge,
-      renderValue: (opt) => (
-        <span>
-          {opt.scopeType === 'specific_model'
+      renderValue: (opt) => {
+        const baseCond =
+          opt.scopeType === 'specific_model'
             ? `เฉพาะ ${opt.vehicleBrand ?? ''} ${opt.vehicleModel ?? ''}`.trim()
             : opt.scopeType === 'unknown'
             ? 'ยังไม่ระบุขอบเขตรุ่นรถ'
-            : `รถทั่วไปอายุ ${opt.minCarAge ?? 1}-${opt.maxCarAge ?? 10} ปี`}
-        </span>
-      ),
+            : `รถทั่วไปอายุ ${opt.minCarAge ?? 1}-${opt.maxCarAge ?? 10} ปี`;
+        const zone = opt.registrationZone ?? 'all';
+        return (
+          <span>
+            <span>{baseCond}</span>
+            {zone !== 'all' ? (
+              <span className="font-bold text-amber-900">
+                {' '}
+                • {formatRegistrationZoneLabel(zone, true)}
+              </span>
+            ) : hasPlateRestriction ? (
+              <span className="text-slate-500"> • ทุกป้ายทะเบียน</span>
+            ) : null}
+          </span>
+        );
+      },
     },
   ];
 
@@ -222,7 +242,8 @@ function CompareContent() {
 
   // Dynamic Summary Header across all compared options
   const usageSet = new Set(options.map((o) => o.usageType || 'private'));
-  const usageSummary =
+  const zoneSet = new Set(options.map((o) => o.registrationZone || 'all'));
+  const baseUsageSummary =
     usageSet.size === 1
       ? options[0].usageType === 'commercial'
         ? 'รถยนต์เชิงพาณิชย์ / รับจ้าง'
@@ -230,6 +251,11 @@ function CompareContent() {
         ? 'รองรับทุกรูปแบบการใช้งาน'
         : 'รถยนต์ใช้งานส่วนบุคคล'
       : 'แตกต่างกันตามแต่ละแผน';
+  const usageSummary = hasPlateRestriction
+    ? zoneSet.size === 1
+      ? `${baseUsageSummary} (${formatRegistrationZoneLabel(options[0].registrationZone, true)})`
+      : `${baseUsageSummary} (จำกัดป้ายบางแผน)`
+    : baseUsageSummary;
 
   const scopeSummary = (() => {
     const scopes = new Set(

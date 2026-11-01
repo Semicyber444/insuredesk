@@ -14,6 +14,7 @@ import {
   Clock,
   CheckCircle2,
   Edit3,
+  Copy,
   Trash2,
   RotateCcw,
   Lock,
@@ -30,6 +31,7 @@ export default function PlansManagementPage() {
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<PlanListItem | null>(null);
+  const [isCopyMode, setIsCopyMode] = useState(false);
 
   const reloadData = useCallback(
     (includeArch = showArchived) => {
@@ -75,11 +77,19 @@ export default function PlansManagementPage() {
   }
 
   const handleOpenCreate = () => {
+    setIsCopyMode(false);
     setEditingPlan(null);
     setIsModalOpen(true);
   };
 
   const handleOpenEdit = (plan: PlanListItem) => {
+    setIsCopyMode(false);
+    setEditingPlan(plan);
+    setIsModalOpen(true);
+  };
+
+  const handleOpenCopy = (plan: PlanListItem) => {
+    setIsCopyMode(true);
     setEditingPlan(plan);
     setIsModalOpen(true);
   };
@@ -254,6 +264,16 @@ export default function PlansManagementPage() {
                         </button>
                       )}
 
+                      <button
+                        type="button"
+                        onClick={() => handleOpenCopy(plan)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50/70 text-emerald-800 hover:bg-emerald-100 font-semibold cursor-pointer"
+                        title="คัดลอกแพ็กเกจนี้เพื่อสร้างแพ็กเกจใหม่"
+                      >
+                        <Copy className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>คัดลอก</span>
+                      </button>
+
                       <Link
                         href={`/plans/${plan.id}`}
                         className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 text-blue-600 hover:bg-blue-50 font-semibold"
@@ -296,12 +316,22 @@ export default function PlansManagementPage() {
         )}
       </div>
 
-      {/* Plan Form Modal for Create & Edit */}
+      {/* Plan Form Modal for Create, Edit & Copy */}
       <PlanFormModal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onSaved={() => reloadData()}
+        onClose={() => {
+          setIsModalOpen(false);
+          setIsCopyMode(false);
+        }}
+        onSaved={() => {
+          if (isCopyMode) {
+            setStatusNotice('คัดลอกและสร้างแพ็กเกจประกันภัยใหม่เรียบร้อยแล้ว');
+          }
+          setIsCopyMode(false);
+          reloadData();
+        }}
         initialPlan={editingPlan}
+        isCopyMode={isCopyMode}
       />
     </div>
   );

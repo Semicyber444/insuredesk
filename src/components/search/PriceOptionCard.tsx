@@ -1,9 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { InsuranceSearchResultItem } from '@/types/insurance';
+import { InsuranceSearchResultItem, formatRegistrationZoneLabel } from '@/types/insurance';
 import { CoverageStatus } from '@/types/database';
-import { CheckCircle2, FileText, ExternalLink, Plus, Check, HelpCircle, MinusCircle } from 'lucide-react';
+import { CheckCircle2, FileText, ExternalLink, Plus, Check, HelpCircle, MinusCircle, MapPin } from 'lucide-react';
 
 interface PriceOptionCardProps {
   item: InsuranceSearchResultItem;
@@ -117,7 +117,7 @@ export function PriceOptionCard({
       {/* Top Header: Insurer & Insurance Type */}
       <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-100">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-bold text-blue-900 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
               {item.insurerName}
             </span>
@@ -133,6 +133,12 @@ export function PriceOptionCard({
             >
               {item.repairType === 'dealer' ? 'ซ่อมห้าง (ศูนย์)' : 'ซ่อมอู่'}
             </span>
+            {item.registrationZone && item.registrationZone !== 'all' && (
+              <span className="inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-300">
+                <MapPin className="w-3 h-3 text-amber-700" />
+                {formatRegistrationZoneLabel(item.registrationZone, true)}
+              </span>
+            )}
           </div>
           <h3 className="text-base font-bold text-slate-900 mt-1.5 line-clamp-1">{item.planName}</h3>
           <p className="text-xs text-slate-500 line-clamp-1">{item.priceOptionLabel}</p>

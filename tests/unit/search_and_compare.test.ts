@@ -121,6 +121,49 @@ describe('1. Search & Filtering Business Rules (Section 10)', () => {
       )
     ).toBe(true);
   });
+
+  it('should filter by registration plate zone (bangkok_only vs upcountry/metro) and emit registration_zone_diff warning', async () => {
+    InsuranceStore.createOrUpdatePlan({
+      insurerId: '20000000-0000-0000-0000-000000000001',
+      name: 'แผนพิเศษเฉพาะรถป้าย กทม.',
+      insuranceType: 'ชั้น 2+',
+      workflowStatus: 'published',
+      registrationZone: 'bangkok_only',
+      documentTitle: 'เอกสารเบี้ยพิเศษป้าย กทม.',
+      priceOptions: [
+        {
+          label: 'ซ่อมอู่ - เฉพาะป้าย กทม.',
+          repairType: 'garage',
+          premiumTotal: 6200,
+          sumInsuredMax: 200000,
+        },
+      ],
+    });
+
+    // Strict Bangkok-only filter finds only bangkok_only plans
+    const strictBkk = await searchInsuranceOptions({ registrationPlate: 'bangkok_only_strict' });
+    expect(strictBkk.items.length).toBe(1);
+    expect(strictBkk.items[0].planName).toBe('แผนพิเศษเฉพาะรถป้าย กทม.');
+    expect(strictBkk.items[0].registrationZone).toBe('bangkok_only');
+
+    // Bangkok plate customer can buy both 'all' and 'bangkok_only' plans
+    const bkkCustomer = await searchInsuranceOptions({ registrationPlate: 'bangkok' });
+    expect(bkkCustomer.items.some((i) => i.planName === 'แผนพิเศษเฉพาะรถป้าย กทม.')).toBe(true);
+
+    // Metro and Upcountry plate customers MUST NOT see 'bangkok_only' plans
+    const metroCustomer = await searchInsuranceOptions({ registrationPlate: 'metro' });
+    expect(metroCustomer.items.some((i) => i.planName === 'แผนพิเศษเฉพาะรถป้าย กทม.')).toBe(false);
+
+    const upcountryCustomer = await searchInsuranceOptions({ registrationPlate: 'upcountry' });
+    expect(upcountryCustomer.items.some((i) => i.planName === 'แผนพิเศษเฉพาะรถป้าย กทม.')).toBe(
+      false
+    );
+
+    // Comparing a bangkok_only option with a nationwide option emits registration_zone_diff warning
+    const allItem = upcountryCustomer.items[0];
+    const warnings = generateComparisonWarnings([strictBkk.items[0], allItem]);
+    expect(warnings.some((w) => w.type === 'registration_zone_diff')).toBe(true);
+  });
 });
 
 describe('2. Comparison Warnings & Formatting Logic (Section 9 & 11)', () => {
@@ -346,5 +389,58 @@ describe('4. Versioning, Workflow Persistence & Archive Rules (Section 8.1 & 12)
     expect(docs[0].storage_path).toBe('storage/documents/1793498200-a1b2c3d4.pdf');
     expect(docs[0].file_size).toBe(512000);
     expect(docs[0].mime_type).toBe('application/pdf');
+  });
+
+  it('should copy/duplicate an insurance plan independently with registrationZone, price tiers, coverages, and document', async () => {
+    const { plan: sourcePlan, version: sourceVer } = InsuranceStore.createOrUpdatePlan({
+      insurerId: '20000000-0000-0000-0000-000000000003',
+      name: 'BKI Metro Special 2+',
+      insuranceType: 'ชั้น 2+',
+      workflowStatus: 'published',
+      registrationZone: 'bangkok_only',
+      minCarAge: 1,
+      maxCarAge: 12,
+      sourceType: 'rate_sheet',
+      documentTitle: 'BKI Metro Rate Sheet',
+      documentRef: 'หน้า 2',
+      documentStoragePath: 'storage/documents/bki-metro.pdf',
+      documentSourceUrl: '/api/documents/bki-metro.pdf',
+      priceOptions: [
+        { label: 'ทุน 100,000', repairType: 'garage', premiumTotal: 5900, sumInsuredMax: 100000 },
+        { label: 'ทุน 200,000', repairType: 'garage', premiumTotal: 6700, sumInsuredMax: 200000 },
+      ],
+    });
+
+    const copied = InsuranceStore.duplicatePlan(sourcePlan.id, 'สมชาย ผู้ดูแลระบบ');
+    expect(copied).not.toBeNull();
+    expect(copied!.plan.id).not.toBe(sourcePlan.id);
+    expect(copied!.plan.name).toBe('BKI Metro Special 2+ (สำเนา)');
+    expect(copied!.version.workflow_status).toBe('draft');
+    expect(copied!.version.id).not.toBe(sourceVer.id);
+
+    const copiedRule = InsuranceStore.getEligibilityRules().find(
+      (r) => r.plan_version_id === copied!.version.id
+    );
+    expect(copiedRule?.registration_zone).toBe('bangkok_only');
+    expect(copiedRule?.max_age).toBe(12);
+
+    const sourceRule = InsuranceStore.getEligibilityRules().find(
+      (r) => r.plan_version_id === sourceVer.id
+    );
+    const sourceOpts = InsuranceStore.getPriceOptions().filter(
+      (o) => o.eligibility_rule_id === sourceRule?.id
+    );
+    const copiedOpts = InsuranceStore.getPriceOptions().filter(
+      (o) => o.eligibility_rule_id === copiedRule?.id
+    );
+    expect(copiedOpts.length).toBe(2);
+    expect(copiedOpts[0].id).not.toBe(sourceOpts[0].id);
+    expect(copiedOpts[1].sum_insured_max).toBe(200000);
+
+    const copiedDocs = InsuranceStore.getDocuments().filter(
+      (d) => d.plan_version_id === copied!.version.id
+    );
+    expect(copiedDocs.length).toBe(1);
+    expect(copiedDocs[0].source_url).toBe('/api/documents/bki-metro.pdf');
   });
 });
