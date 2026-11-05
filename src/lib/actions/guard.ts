@@ -1,3 +1,4 @@
+import type { z } from 'zod';
 import { getCurrentSession, type UserSession } from '@/lib/auth/session';
 import { hasPermission, ROLE_PERMISSIONS } from '@/lib/permissions/roles';
 import { StoreError } from '@/lib/store/errors';
@@ -7,6 +8,15 @@ import type { ActionResult } from './result';
 export type Permission = keyof (typeof ROLE_PERMISSIONS)['admin'];
 
 export const actorOf = (session: UserSession): Actor => ({ id: session.user.id, name: session.user.name });
+
+/** Server Action arguments come straight from the request, so types alone don't protect them. */
+export function parseInput<S extends z.ZodType>(schema: S, value: unknown): z.output<S> {
+  const result = schema.safeParse(value);
+  if (!result.success) {
+    throw new StoreError(result.error.issues[0]?.message ?? 'ข้อมูลไม่ถูกต้อง');
+  }
+  return result.data;
+}
 
 /**
  * Wraps every Server Action: these are reachable by direct POST, so each one must check the

@@ -14,6 +14,7 @@ const TABLES = [
   'vehicle_models',
   'insurers',
   'sessions',
+  'login_attempts',
   'user_roles',
   'users',
 ];

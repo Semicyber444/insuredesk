@@ -129,6 +129,20 @@ async function findVersion(db: Db, versionId: string): Promise<PlanVersion> {
   return version;
 }
 
+/** Locks the version's plan, so concurrent workflow changes can't both pass the status check. */
+async function lockVersionInStatus(
+  tx: PoolConnection,
+  versionId: string,
+  allowed: WorkflowStatus,
+  message: string
+): Promise<PlanVersion> {
+  const { plan_id } = await findVersion(tx, versionId);
+  await lockPlan(tx, plan_id);
+  const version = await findVersion(tx, versionId);
+  if (version.workflow_status !== allowed) throw new StoreError(message);
+  return version;
+}
+
 /** Section 12.3: at most one published version per plan. */
 async function archiveOtherPublishedVersions(
   tx: PoolConnection,
@@ -333,6 +347,20 @@ export class InsuranceStore {
     return selectRows<SourceDocument>(getPool(), 'SELECT * FROM source_documents ORDER BY created_at DESC, id');
   }
 
+  /** True when the stored file belongs to a published version of a plan that isn't archived. */
+  static async isPublishedDocument(storagePath: string): Promise<boolean> {
+    const rows = await selectRows(
+      getPool(),
+      `SELECT d.id FROM source_documents d
+       JOIN plan_versions v ON v.id = d.plan_version_id
+       JOIN plans p ON p.id = v.plan_id
+       WHERE d.storage_path = ? AND v.workflow_status = 'published' AND p.is_archived = FALSE
+       LIMIT 1`,
+      [storagePath]
+    );
+    return rows.length > 0;
+  }
+
   static getAuditLogs(): Promise<AuditLog[]> {
     return selectRows<AuditLog>(getPool(), 'SELECT * FROM audit_logs ORDER BY created_at DESC, id');
   }
@@ -348,7 +376,7 @@ export class InsuranceStore {
   // Workflow Status Transitions with Full Persistence & Audit Logging (Section 12.2 & 12.3)
   static async submitForReview(versionId: string, reason: string, actor: Actor = SYSTEM_ACTOR): Promise<void> {
     await withTransaction(async (tx) => {
-      const version = await findVersion(tx, versionId);
+      const version = await lockVersionInStatus(tx, versionId, 'draft', 'ส่งตรวจได้เฉพาะรุ่นที่เป็นฉบับร่างเท่านั้น');
       await updateRow(tx, 'plan_versions', versionId, {
         workflow_status: 'in_review',
         updated_at: new Date().toISOString(),
@@ -367,9 +395,7 @@ export class InsuranceStore {
 
   static async publishPlanVersion(versionId: string, reason: string, actor: Actor = SYSTEM_ACTOR): Promise<void> {
     await withTransaction(async (tx) => {
-      const { plan_id } = await findVersion(tx, versionId);
-      await lockPlan(tx, plan_id);
-      const version = await findVersion(tx, versionId);
+      const version = await lockVersionInStatus(tx, versionId, 'in_review', 'เผยแพร่ได้เฉพาะรุ่นที่อยู่ระหว่างตรวจสอบเท่านั้น');
 
       const docs = await selectRows(tx, 'SELECT id FROM source_documents WHERE plan_version_id = ? LIMIT 1', [versionId]);
       if (docs.length === 0) {
@@ -399,7 +425,7 @@ export class InsuranceStore {
 
   static async rejectPlanVersion(versionId: string, reason: string, actor: Actor = SYSTEM_ACTOR): Promise<void> {
     await withTransaction(async (tx) => {
-      const version = await findVersion(tx, versionId);
+      const version = await lockVersionInStatus(tx, versionId, 'in_review', 'ตีกลับได้เฉพาะรุ่นที่อยู่ระหว่างตรวจสอบเท่านั้น');
       await updateRow(tx, 'plan_versions', versionId, {
         workflow_status: 'draft',
         updated_at: new Date().toISOString(),

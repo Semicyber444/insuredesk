@@ -17,6 +17,7 @@ import {
   publishVersionAction,
   savePlanAction,
   searchOptionsAction,
+  submitForReviewAction,
 } from '@/lib/actions/insurance';
 
 const PLAN_ID = '40000000-0000-0000-0000-000000000001';
@@ -99,6 +100,7 @@ describe('Server Action authorization (replaces Postgres RLS)', () => {
     const saved = await savePlanAction({ ...draftPayload, workflowStatus: 'draft' });
     if (!saved.ok) throw new Error(saved.error);
 
+    expect((await submitForReviewAction(saved.data.version.id, 'x')).ok).toBe(true);
     const result = await publishVersionAction(saved.data.version.id, 'x');
     expect(result).toEqual({ ok: false, error: expect.stringContaining('Section 8.4') });
   });

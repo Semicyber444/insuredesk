@@ -25,6 +25,8 @@ export function getPool(): Pool {
     timezone: 'Z',
     connectionLimit: Number(process.env.DATABASE_POOL_SIZE) || 10,
     decimalNumbers: true,
+    // query() would otherwise expand an object parameter into `col = value` SQL fragments.
+    stringifyObjects: true,
     // Return rows in the shape src/types/database.ts declares.
     typeCast(field, next) {
       if (field.type === 'DATE') return field.string('utf8');
