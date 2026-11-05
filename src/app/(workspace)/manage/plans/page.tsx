@@ -187,7 +187,7 @@ export default function PlansManagementPage() {
       </div>
 
       {statusNotice && (
-        <div className="bg-blue-50 border border-blue-200 text-blue-900 text-xs font-medium px-4 py-3 rounded-xl flex items-center justify-between">
+        <div role="status" className="bg-blue-50 border border-blue-200 text-blue-900 text-xs font-medium px-4 py-3 rounded-xl flex items-center justify-between">
           <span>{statusNotice}</span>
           <button
             type="button"
@@ -229,12 +229,12 @@ export default function PlansManagementPage() {
                     <td className="p-4 font-bold text-slate-800">{plan.insurerName}</td>
                     <td className="p-4">
                       <div className="font-bold text-slate-900">{plan.name}</div>
-                      <div className="text-[11px] text-slate-400">ID: {plan.id.slice(0, 8)}...</div>
+                      <div className="text-[11px] text-slate-500">ID: {plan.id.slice(0, 8)}...</div>
                     </td>
                     <td className="p-4 font-semibold text-slate-700">{plan.insurance_type}</td>
                     <td className="p-4">
                       <span className="font-semibold text-slate-800">รุ่นที่ {plan.latestVersionNo}</span>
-                      <span className="text-slate-400 text-[10px] block">({plan.versionsCount} รุ่น)</span>
+                      <span className="text-slate-500 text-[10px] block">({plan.versionsCount} รุ่น)</span>
                     </td>
                     <td className="p-4">
                       {plan.is_archived ? (

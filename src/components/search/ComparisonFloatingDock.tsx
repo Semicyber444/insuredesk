@@ -57,6 +57,7 @@ export function ComparisonFloatingDock({
                   onClick={() => onRemove(item.id)}
                   className="hover:text-red-400 p-0.5 rounded transition cursor-pointer"
                   title="นำออก"
+                  aria-label="นำออก"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -70,7 +71,7 @@ export function ComparisonFloatingDock({
           <button
             type="button"
             onClick={onClear}
-            className="text-xs text-slate-400 hover:text-white px-3 py-2 rounded-lg transition cursor-pointer"
+            className="text-xs text-slate-300 hover:text-white px-3 py-2 rounded-lg transition cursor-pointer"
           >
             ล้างทั้งหมด
           </button>
@@ -86,7 +87,7 @@ export function ComparisonFloatingDock({
           ) : (
             <button
               disabled
-              className="bg-slate-800 text-slate-500 px-4 py-2 rounded-xl text-xs font-medium cursor-not-allowed"
+              className="bg-slate-800 text-slate-400 px-4 py-2 rounded-xl text-xs font-medium cursor-not-allowed"
             >
               ต้องเลือก 2-4 รายการ
             </button>

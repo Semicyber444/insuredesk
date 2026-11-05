@@ -164,7 +164,7 @@ function CompareContent() {
             {sumVal !== null && sumVal !== undefined ? (
               `฿${sumVal.toLocaleString('th-TH')}`
             ) : (
-              <span className="text-slate-400 font-normal">ยังไม่ระบุทุน</span>
+              <span className="text-slate-500 font-normal">ยังไม่ระบุทุน</span>
             )}
           </span>
         );
@@ -373,7 +373,7 @@ function CompareContent() {
             <ArrowLeft className="w-3.5 h-3.5" />
             <span>กลับไปหน้าค้นหา</span>
           </Link>
-          <span className="text-xs text-slate-400">•</span>
+          <span className="text-xs text-slate-500">•</span>
           <span className="text-xs font-bold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-lg">
             {options.length} แผนประกัน
           </span>
@@ -556,7 +556,8 @@ function CompareContent() {
                                 type="button"
                                 onClick={() => handleRemoveOption(opt.id)}
                                 title="นำตัวเลือกนี้ออก"
-                                className="no-print text-slate-400 hover:text-red-600 p-0.5 rounded transition cursor-pointer"
+                                aria-label="นำตัวเลือกนี้ออก"
+                                className="no-print text-slate-500 hover:text-red-600 p-0.5 rounded transition cursor-pointer"
                               >
                                 <X className="w-3 h-3" />
                               </button>
@@ -683,13 +684,13 @@ function CompareContent() {
                                 </div>
                               )}
                               {isNotCovered && (
-                                <span className="text-slate-400 font-normal">ไม่คุ้มครอง</span>
+                                <span className="text-slate-500 font-normal">ไม่คุ้มครอง</span>
                               )}
                               {isOptional && (
                                 <span className="text-amber-800 font-medium">{val.text}</span>
                               )}
                               {!isCovered && !isNotCovered && !isOptional && (
-                                <span className="text-slate-400">ยังไม่ระบุ</span>
+                                <span className="text-slate-500">ยังไม่ระบุ</span>
                               )}
                             </td>
                           );
@@ -721,7 +722,7 @@ function CompareContent() {
               <div className="h-6"></div>
               <div className="border-b border-slate-400 w-3/4 mx-auto"></div>
               <span className="text-slate-600 block">( {userName} / ทีม InsureDesk )</span>
-              <span className="text-slate-400 text-[8.5px] block">วันที่: {dateFormattedThai}</span>
+              <span className="text-slate-500 text-[8.5px] block">วันที่: {dateFormattedThai}</span>
             </div>
 
             {/* Right: Customer Acceptance */}
@@ -737,7 +738,7 @@ function CompareContent() {
               </div>
               <div className="border-b border-slate-400 w-3/4 mx-auto mt-2"></div>
               <span className="text-slate-600 block">ลงชื่อ: ................................................................</span>
-              <span className="text-slate-400 text-[8.5px] block">
+              <span className="text-slate-500 text-[8.5px] block">
                 วันที่: ........ / ........ / {thaiBuddhistYear}
               </span>
             </div>

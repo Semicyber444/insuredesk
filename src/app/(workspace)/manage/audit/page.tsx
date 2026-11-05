@@ -84,7 +84,7 @@ export default function AuditPage() {
                       {log.actor_name || 'ระบบอัตโนมัติ'}
                     </span>
                     <span>•</span>
-                    <span className="text-[11px] font-mono text-slate-400">ID: {log.id}</span>
+                    <span className="text-[11px] font-mono text-slate-500">ID: {log.id}</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <Clock className="w-3.5 h-3.5" />

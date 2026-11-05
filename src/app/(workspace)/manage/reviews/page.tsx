@@ -10,6 +10,7 @@ import {
 } from '@/lib/actions/insurance';
 import { unwrap } from '@/lib/actions/result';
 import { LoadError } from '@/components/ui/LoadError';
+import { Modal } from '@/components/ui/Modal';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { FileCheck, Check, X, Clock, ExternalLink, AlertCircle, Lock } from 'lucide-react';
 
@@ -199,7 +200,7 @@ export default function ReviewManagementPage() {
                         planName: plan?.name ?? '',
                       });
                     }}
-                    className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                    className="px-4 py-2 text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-800 rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
                   >
                     <Check className="w-3.5 h-3.5" />
                     <span>อนุมัติและเผยแพร่</span>
@@ -213,7 +214,15 @@ export default function ReviewManagementPage() {
 
       {/* Confirmation Modal */}
       {activeActionModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+        <Modal 
+          labelledBy="review-modal-title"
+          onRequestClose={() => {
+            setActiveActionModal(null);
+            setReason('');
+            setActionError('');
+          }}
+          className="bg-slate-900/40 backdrop-blur-xs p-4"
+        >
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center gap-2">
               {activeActionModal.action === 'publish' ? (
@@ -225,7 +234,7 @@ export default function ReviewManagementPage() {
                   <X className="w-4 h-4" />
                 </div>
               )}
-              <h3 className="text-base font-bold text-slate-900">
+              <h3 id="review-modal-title" className="text-base font-bold text-slate-900">
                 {activeActionModal.action === 'publish'
                   ? 'ยืนยันการเผยแพร่ข้อมูล'
                   : 'ส่งกลับให้ผู้กรอกแก้ไข'}
@@ -233,7 +242,7 @@ export default function ReviewManagementPage() {
             </div>
 
             {actionError && (
-              <div className="p-2.5 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-start gap-2">
+              <div role="alert" className="p-2.5 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
                 <span>{actionError}</span>
               </div>
@@ -244,10 +253,11 @@ export default function ReviewManagementPage() {
             </p>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-700">
+              <label htmlFor="review-reason" className="text-xs font-semibold text-slate-700">
                 เหตุผลและบันทึกการตรวจสอบ (จะถูกบันทึกลงใน Audit Log):
               </label>
               <textarea
+                id="review-reason"
                 rows={3}
                 placeholder={
                   activeActionModal.action === 'publish'
@@ -278,7 +288,7 @@ export default function ReviewManagementPage() {
                 onClick={handleConfirmAction}
                 className={`px-4 py-2 text-xs font-bold text-white rounded-xl shadow-xs transition cursor-pointer ${
                   activeActionModal.action === 'publish'
-                    ? 'bg-emerald-600 hover:bg-emerald-700'
+                    ? 'bg-emerald-700 hover:bg-emerald-800'
                     : 'bg-red-600 hover:bg-red-700'
                 } disabled:opacity-50 disabled:cursor-not-allowed`}
               >
@@ -286,7 +296,7 @@ export default function ReviewManagementPage() {
               </button>
             </div>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

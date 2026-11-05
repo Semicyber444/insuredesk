@@ -54,7 +54,7 @@ export function LoginForm({ demoAuthEnabled }: { demoAuthEnabled: boolean }) {
         </div>
 
         {errorMessage && (
-          <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-start gap-2">
+          <div role="alert" className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-start gap-2">
             <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
             <span>{errorMessage}</span>
           </div>
@@ -63,10 +63,11 @@ export function LoginForm({ demoAuthEnabled }: { demoAuthEnabled: boolean }) {
         {/* Login Form */}
         <form onSubmit={handleLogin} className="space-y-4">
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-700">อีเมลสมาชิก</label>
+            <label htmlFor="login-email" className="text-xs font-semibold text-slate-700">อีเมลสมาชิก</label>
             <div className="relative">
-              <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+              <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
               <input
+                id="login-email"
                 type="email"
                 required
                 value={email}
@@ -78,10 +79,11 @@ export function LoginForm({ demoAuthEnabled }: { demoAuthEnabled: boolean }) {
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-700">รหัสผ่าน</label>
+            <label htmlFor="login-password" className="text-xs font-semibold text-slate-700">รหัสผ่าน</label>
             <div className="relative">
-              <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+              <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
               <input
+                id="login-password"
                 type="password"
                 required
                 value={password}
@@ -105,7 +107,7 @@ export function LoginForm({ demoAuthEnabled }: { demoAuthEnabled: boolean }) {
         {/* Quick Demo Accounts Selection */}
         {demoAuthEnabled && (
           <div className="pt-4 border-t border-slate-100 space-y-2">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block text-center">
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block text-center">
               เลือกเข้าสู่ระบบด่วนด้วยบัญชีจำลอง (สำหรับทดสอบ)
             </span>
             <div className="grid grid-cols-4 gap-2">

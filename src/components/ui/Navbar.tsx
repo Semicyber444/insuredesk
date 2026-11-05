@@ -122,7 +122,7 @@ export function Navbar() {
                 type="button"
                 onClick={handleLogout}
                 title="ออกจากระบบ / สลับบัญชี"
-                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
+                className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
               >
                 <LogOut className="w-4 h-4" />
               </button>

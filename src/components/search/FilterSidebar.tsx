@@ -88,10 +88,11 @@ export function FilterSidebar({
 
       {/* 1. Keyword search */}
       <div className="space-y-1.5">
-        <label className="text-xs font-semibold text-slate-700">ค้นหาชื่อบริษัท หรือ แพ็กเกจ</label>
+        <label htmlFor="filter-query" className="text-xs font-semibold text-slate-700">ค้นหาชื่อบริษัท หรือ แพ็กเกจ</label>
         <div className="relative">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+          <Search className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
           <input
+            id="filter-query"
             type="text"
             placeholder="เช่น วิริยะ, BKI, ซ่อมห้าง..."
             value={filters.query ?? ''}
@@ -103,8 +104,8 @@ export function FilterSidebar({
 
       {/* 2. Insurance Types */}
       <div className="space-y-2">
-        <label className="text-xs font-semibold text-slate-700">ประเภทประกันภัย</label>
-        <div className="grid grid-cols-2 gap-1.5">
+        <span id="filter-insurance-types" className="text-xs font-semibold text-slate-700">ประเภทประกันภัย</span>
+        <div role="group" aria-labelledby="filter-insurance-types" className="grid grid-cols-2 gap-1.5">
           {INSURANCE_TYPES.map((type) => {
             const isSelected = (filters.insuranceTypes ?? []).includes(type);
             return (
@@ -127,8 +128,8 @@ export function FilterSidebar({
 
       {/* 3. Repair Type */}
       <div className="space-y-2">
-        <label className="text-xs font-semibold text-slate-700">ลักษณะการซ่อม</label>
-        <div className="space-y-1.5">
+        <span id="filter-repair-types" className="text-xs font-semibold text-slate-700">ลักษณะการซ่อม</span>
+        <div role="group" aria-labelledby="filter-repair-types" className="space-y-1.5">
           {REPAIR_TYPES.map((item) => {
             const isChecked = (filters.repairTypes ?? []).includes(item.value);
             return (
@@ -151,8 +152,8 @@ export function FilterSidebar({
 
       {/* 4. Insurers Multi-select */}
       <div className="space-y-2">
-        <label className="text-xs font-semibold text-slate-700">บริษัทประกันภัย</label>
-        <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+        <span id="filter-insurers" className="text-xs font-semibold text-slate-700">บริษัทประกันภัย</span>
+        <div role="group" aria-labelledby="filter-insurers" className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
           {insurers.map((ins) => {
             const isChecked = (filters.insurerIds ?? []).includes(ins.id);
             return (
@@ -176,8 +177,9 @@ export function FilterSidebar({
       {/* 5. Car Brand, Model, Age & Usage Type */}
       <div className="space-y-3 pt-2 border-t border-slate-100">
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-slate-700">ยี่ห้อรถยนต์</label>
+          <label htmlFor="filter-vehicleBrand" className="text-xs font-semibold text-slate-700">ยี่ห้อรถยนต์</label>
           <select
+            id="filter-vehicleBrand"
             value={filters.vehicleBrand ?? ''}
             onChange={(e) => {
               const nextBrand = e.target.value || undefined;
@@ -204,8 +206,9 @@ export function FilterSidebar({
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-slate-700">รุ่นรถยนต์</label>
+          <label htmlFor="filter-vehicleModelId" className="text-xs font-semibold text-slate-700">รุ่นรถยนต์</label>
           <select
+            id="filter-vehicleModelId"
             value={filters.vehicleModelId ?? ''}
             onChange={(e) =>
               onFilterChange({
@@ -227,8 +230,9 @@ export function FilterSidebar({
 
         <div className="grid grid-cols-2 gap-2">
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-700">อายุรถ (ปี)</label>
+            <label htmlFor="filter-carAge" className="text-xs font-semibold text-slate-700">อายุรถ (ปี)</label>
             <input
+              id="filter-carAge"
               type="number"
               min={0}
               max={35}
@@ -246,8 +250,9 @@ export function FilterSidebar({
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-700">การใช้งาน</label>
+            <label htmlFor="filter-usageType" className="text-xs font-semibold text-slate-700">การใช้งาน</label>
             <select
+              id="filter-usageType"
               value={filters.usageType ?? ''}
               onChange={(e) =>
                 onFilterChange({
@@ -266,11 +271,12 @@ export function FilterSidebar({
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-slate-700 flex items-center gap-1">
+          <label htmlFor="filter-registrationPlate" className="text-xs font-semibold text-slate-700 flex items-center gap-1">
             <MapPin className="w-3.5 h-3.5 text-blue-600" />
             <span>ป้ายทะเบียนรถ</span>
           </label>
           <select
+            id="filter-registrationPlate"
             value={filters.registrationPlate ?? ''}
             onChange={(e) =>
               onFilterChange({
@@ -293,12 +299,13 @@ export function FilterSidebar({
       {/* 6. Premium & Sum Insured Ranges */}
       <div className="space-y-3 pt-2 border-t border-slate-100">
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-slate-700">ช่วงเบี้ยรวม (บาท)</label>
-          <div className="grid grid-cols-2 gap-2">
+          <span id="filter-premium-range" className="text-xs font-semibold text-slate-700">ช่วงเบี้ยรวม (บาท)</span>
+          <div role="group" aria-labelledby="filter-premium-range" className="grid grid-cols-2 gap-2">
             <input
               type="number"
               min={0}
               placeholder="ต่ำสุด"
+              aria-label="เบี้ยรวมต่ำสุด (บาท)"
               value={filters.minPremium ?? ''}
               onChange={(e) =>
                 onFilterChange({
@@ -313,6 +320,7 @@ export function FilterSidebar({
               type="number"
               min={0}
               placeholder="สูงสุด"
+              aria-label="เบี้ยรวมสูงสุด (บาท)"
               value={filters.maxPremium ?? ''}
               onChange={(e) =>
                 onFilterChange({
@@ -338,13 +346,14 @@ export function FilterSidebar({
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-slate-700">ช่วงทุนประกัน (บาท)</label>
-          <div className="grid grid-cols-2 gap-2">
+          <span id="filter-sum-range" className="text-xs font-semibold text-slate-700">ช่วงทุนประกัน (บาท)</span>
+          <div role="group" aria-labelledby="filter-sum-range" className="grid grid-cols-2 gap-2">
             <input
               type="number"
               min={0}
               step={50000}
               placeholder="ทุนต่ำสุด"
+              aria-label="ทุนประกันต่ำสุด (บาท)"
               value={filters.minSumInsured ?? ''}
               onChange={(e) =>
                 onFilterChange({
@@ -360,6 +369,7 @@ export function FilterSidebar({
               min={0}
               step={50000}
               placeholder="ทุนสูงสุด"
+              aria-label="ทุนประกันสูงสุด (บาท)"
               value={filters.maxSumInsured ?? ''}
               onChange={(e) =>
                 onFilterChange({
@@ -378,19 +388,19 @@ export function FilterSidebar({
       <div className="space-y-2 pt-2 border-t border-slate-100">
         <div className="flex items-center justify-between">
           <div>
-            <label className="text-xs font-semibold text-slate-700 block">
+            <span id="filter-coverages" className="text-xs font-semibold text-slate-700 block">
               ความคุ้มครองที่ต้องมี ({filters.requiredCoverageCodes?.length || 0})
-            </label>
+            </span>
             <span className="text-[10px] text-slate-500">แผนต้องคุ้มครอง ไม่นับที่เป็นตัวเลือกซื้อเพิ่ม</span>
           </div>
         </div>
 
-        <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+        <div role="group" aria-labelledby="filter-coverages" className="space-y-3 max-h-72 overflow-y-auto pr-1">
           {categories.map((cat) => {
             const typesInCat = coverageTypes.filter((c) => c.category === cat);
             return (
               <div key={cat} className="space-y-1">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
                   หมวด{cat}
                 </span>
                 <div className="space-y-1">

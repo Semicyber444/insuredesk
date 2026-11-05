@@ -191,7 +191,7 @@ export default function PlanDetailPage({ params, searchParams }: Props) {
       </div>
 
       {actionError && (
-        <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700">{actionError}</div>
+        <div role="alert" className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700">{actionError}</div>
       )}
 
       {/* Plan Header Card */}
@@ -349,7 +349,7 @@ export default function PlanDetailPage({ params, searchParams }: Props) {
                 <span>รุ่นที่ {ver.version_no}</span>
                 <span
                   className={`text-[10px] uppercase font-bold ${
-                    isSelectedVer ? 'text-blue-100' : 'text-slate-400'
+                    isSelectedVer ? 'text-white' : 'text-slate-500'
                   }`}
                 >
                   ({ver.workflow_status})
@@ -371,7 +371,7 @@ export default function PlanDetailPage({ params, searchParams }: Props) {
               <span>เงื่อนไขรถที่รับประกัน</span>
             </h3>
             {rules.length === 0 ? (
-              <p className="text-xs text-slate-400">ยังไม่มีข้อมูลเงื่อนไขรถยนต์ในรุ่นนี้</p>
+              <p className="text-xs text-slate-500">ยังไม่มีข้อมูลเงื่อนไขรถยนต์ในรุ่นนี้</p>
             ) : (
               rules.map((r) => {
                 const vehicle = r.vehicle_model_id
@@ -432,7 +432,7 @@ export default function PlanDetailPage({ params, searchParams }: Props) {
               ตัวเลือกราคาในรุ่นนี้ ({options.length})
             </h3>
             {options.length === 0 ? (
-              <p className="text-xs text-slate-400">ยังไม่มีตัวเลือกราคาในรุ่นนี้</p>
+              <p className="text-xs text-slate-500">ยังไม่มีตัวเลือกราคาในรุ่นนี้</p>
             ) : (
               <div className="space-y-2">
                 {options.map((opt) => {
@@ -503,7 +503,7 @@ export default function PlanDetailPage({ params, searchParams }: Props) {
                           จุดอ้างอิง: {doc.page_reference}
                         </div>
                       )}
-                      <div className="text-[10px] text-slate-400">
+                      <div className="text-[10px] text-slate-500">
                         ประเภท: {doc.source_type}
                         {doc.storage_path ? ` • ไฟล์: ${doc.storage_path}` : ''}
                         {doc.file_size
@@ -585,7 +585,7 @@ export default function PlanDetailPage({ params, searchParams }: Props) {
                         cov.status === 'covered'
                           ? 'bg-emerald-50 text-emerald-800'
                           : cov.status === 'not_covered'
-                          ? 'bg-slate-100 text-slate-500'
+                          ? 'bg-slate-100 text-slate-600'
                           : cov.status === 'optional'
                           ? 'bg-amber-50 text-amber-800'
                           : 'bg-slate-50 text-slate-500 border border-slate-200'
@@ -616,7 +616,7 @@ export default function PlanDetailPage({ params, searchParams }: Props) {
               <span>ประวัติการเปลี่ยนแปลงและการตรวจสอบ (Audit Trail)</span>
             </h3>
             {auditLogs.length === 0 ? (
-              <p className="text-xs text-slate-400">ยังไม่มีประวัติบันทึกสำหรับแพ็กเกจนี้</p>
+              <p className="text-xs text-slate-500">ยังไม่มีประวัติบันทึกสำหรับแพ็กเกจนี้</p>
             ) : (
               <div className="space-y-2">
                 {auditLogs.map((log) => (

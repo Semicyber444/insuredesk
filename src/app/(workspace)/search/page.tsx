@@ -132,9 +132,10 @@ export default function SearchPage() {
 
         {/* Sorting Dropdown */}
         <div className="flex items-center gap-2">
-          <ArrowUpDown className="w-4 h-4 text-slate-400" />
+          <ArrowUpDown className="w-4 h-4 text-slate-500" />
           <span className="text-xs font-semibold text-slate-600">เรียงตาม:</span>
           <select
+            aria-label="เรียงตาม"
             value={filters.sortBy ?? 'premium_asc'}
             onChange={(e) =>
               handleFilterChange({
@@ -174,7 +175,7 @@ export default function SearchPage() {
             </div>
           ) : results.items.length === 0 ? (
             <div className="bg-white border border-slate-200 rounded-xl p-12 text-center">
-              <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3 text-slate-400">
+              <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3 text-slate-500">
                 <SearchX className="w-6 h-6" />
               </div>
               <h3 className="text-base font-bold text-slate-800">ไม่พบแพ็กเกจที่ตรงตามเงื่อนไข</h3>

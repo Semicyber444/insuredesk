@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { deleteInsurerAction, getInsurersAction, saveInsurerAction } from '@/lib/actions/insurance';
 import { unwrap } from '@/lib/actions/result';
 import { LoadError } from '@/components/ui/LoadError';
+import { Modal } from '@/components/ui/Modal';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { InsurerSchema } from '@/lib/validation/schemas';
 import { Insurer } from '@/types/database';
@@ -167,7 +168,7 @@ export default function InsurersPage() {
       </div>
 
       {statusNotice && (
-        <div className="bg-amber-50 border border-amber-200 text-amber-900 text-xs font-medium px-4 py-3 rounded-xl flex items-center justify-between">
+        <div role="status" className="bg-amber-50 border border-amber-200 text-amber-900 text-xs font-medium px-4 py-3 rounded-xl flex items-center justify-between">
           <span>{statusNotice}</span>
           <button
             type="button"
@@ -203,12 +204,12 @@ export default function InsurersPage() {
 
               <div className="space-y-1.5 text-xs text-slate-600">
                 <div className="flex items-center gap-2">
-                  <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  <Phone className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                   <span>{ins.contact_channels || 'ไม่มีข้อมูลติดต่อ'}</span>
                 </div>
                 {ins.website && (
                   <div className="flex items-center gap-2">
-                    <Globe className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <Globe className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                     <a
                       href={ins.website}
                       target="_blank"
@@ -237,6 +238,7 @@ export default function InsurersPage() {
                 onClick={() => handleDelete(ins.id, ins.name)}
                 className="flex items-center gap-1 px-2 py-1.5 rounded-lg border border-red-100 text-red-600 hover:bg-red-50 cursor-pointer"
                 title="ลบหรือปิดการใช้งาน"
+                aria-label="ลบหรือปิดการใช้งาน"
               >
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
@@ -246,25 +248,26 @@ export default function InsurersPage() {
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+        <Modal labelledBy="insurer-modal-title" onRequestClose={() => setShowModal(false)} className="bg-slate-900/40 backdrop-blur-xs p-4">
           <form
             onSubmit={handleSave}
             className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95"
           >
-            <h3 className="text-base font-bold text-slate-900">
+            <h3 id="insurer-modal-title" className="text-base font-bold text-slate-900">
               {editingId ? 'แก้ไขข้อมูลบริษัทประกันภัย' : 'เพิ่มบริษัทประกันภัยใหม่'}
             </h3>
 
             {errorMsg && (
-              <div className="p-2.5 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-center gap-2">
+              <div role="alert" className="p-2.5 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
                 <span>{errorMsg}</span>
               </div>
             )}
 
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-700">ชื่อบริษัทประกัน *</label>
+              <label htmlFor="insurer-name" className="text-xs font-semibold text-slate-700">ชื่อบริษัทประกัน *</label>
               <input
+                id="insurer-name"
                 type="text"
                 required
                 value={name}
@@ -275,8 +278,9 @@ export default function InsurersPage() {
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-700">ช่องทางติดต่อ / Call Center</label>
+              <label htmlFor="insurer-contact" className="text-xs font-semibold text-slate-700">ช่องทางติดต่อ / Call Center</label>
               <input
+                id="insurer-contact"
                 type="text"
                 value={contact}
                 onChange={(e) => setContact(e.target.value)}
@@ -286,8 +290,9 @@ export default function InsurersPage() {
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-700">เว็บไซต์ทางการ</label>
+              <label htmlFor="insurer-website" className="text-xs font-semibold text-slate-700">เว็บไซต์ทางการ</label>
               <input
+                id="insurer-website"
                 type="url"
                 value={website}
                 onChange={(e) => setWebsite(e.target.value)}
@@ -324,7 +329,7 @@ export default function InsurersPage() {
               </button>
             </div>
           </form>
-        </div>
+        </Modal>
       )}
     </div>
   );
