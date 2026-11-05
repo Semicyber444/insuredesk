@@ -2,17 +2,19 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import type { PendingReviewItem } from '@/lib/queries/plans';
 import {
-  getPendingReviews,
-  PendingReviewItem,
-  publishPlanVersion,
-  rejectPlanVersion,
-} from '@/lib/queries/plans';
+  getPendingReviewsAction,
+  publishVersionAction,
+  rejectVersionAction,
+} from '@/lib/actions/insurance';
+import { unwrap } from '@/lib/actions/result';
+import { LoadError } from '@/components/ui/LoadError';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { FileCheck, Check, X, Clock, ExternalLink, AlertCircle, Lock } from 'lucide-react';
 
 export default function ReviewManagementPage() {
-  const { userName, can } = useAuth();
+  const { can } = useAuth();
   const [reviews, setReviews] = useState<PendingReviewItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeActionModal, setActiveActionModal] = useState<{
@@ -23,22 +25,31 @@ export default function ReviewManagementPage() {
   const [reason, setReason] = useState('');
   const [actionError, setActionError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const reloadData = useCallback(() => {
     setIsLoading(true);
-    getPendingReviews().then((res) => {
-      setReviews(res);
-      setIsLoading(false);
-    });
+    getPendingReviewsAction()
+      .then(unwrap)
+      .then((res) => {
+        setReviews(res);
+        setIsLoading(false);
+      })
+      .catch((err: Error) => setLoadError(err.message));
   }, []);
 
   useEffect(() => {
     let isMounted = true;
-    getPendingReviews().then((res) => {
-      if (!isMounted) return;
-      setReviews(res);
-      setIsLoading(false);
-    });
+    getPendingReviewsAction()
+      .then(unwrap)
+      .then((res) => {
+        if (!isMounted) return;
+        setReviews(res);
+        setIsLoading(false);
+      })
+      .catch((err: Error) => {
+        if (isMounted) setLoadError(err.message);
+      });
     return () => {
       isMounted = false;
     };
@@ -71,9 +82,9 @@ export default function ReviewManagementPage() {
     setActionError('');
     try {
       if (activeActionModal.action === 'publish') {
-        await publishPlanVersion(activeActionModal.versionId, reason.trim(), userName);
+        unwrap(await publishVersionAction(activeActionModal.versionId, reason.trim()));
       } else {
-        await rejectPlanVersion(activeActionModal.versionId, reason.trim(), userName);
+        unwrap(await rejectVersionAction(activeActionModal.versionId, reason.trim()));
       }
       setActiveActionModal(null);
       setReason('');
@@ -84,6 +95,8 @@ export default function ReviewManagementPage() {
       setIsSubmitting(false);
     }
   };
+
+  if (loadError) return <LoadError message={loadError} />;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import {
   Insurer,
   VehicleModel,
@@ -14,8 +14,15 @@ import {
   SourceType,
   CompulsoryInclusion,
 } from '@/types/database';
-import { InsuranceStore, getBangkokDateString } from '@/lib/store/insuranceStore';
-import { MOCK_COVERAGE_TYPES } from '@/lib/queries/mockData';
+import { getBangkokDateString } from '@/lib/date';
+import { STANDARD_COVERAGE_TYPES } from '@/lib/constants/coverageTypes';
+import {
+  getPlanBundleAction,
+  getPlanFormReferenceAction,
+  savePlanAction,
+} from '@/lib/actions/insurance';
+import { unwrap } from '@/lib/actions/result';
+import type { PlanBundle } from '@/lib/queries/plans';
 import { useAuth } from '@/lib/auth/AuthContext';
 import {
   PlanSchema,
@@ -89,7 +96,7 @@ function buildCoveragePreset(type: InsuranceType): CoverageItemState[] {
   const is3Plus = type === 'ชั้น 3+';
   const isType2 = type === 'ชั้น 2';
 
-  return MOCK_COVERAGE_TYPES.map((ct) => {
+  return STANDARD_COVERAGE_TYPES.map((ct) => {
     let status: CoverageStatus = 'covered';
     let limitAmount: number | string = '';
     let limitBasis = '';
@@ -208,13 +215,20 @@ function formatAutoLabel(repairType: RepairType, hasSumInsured: boolean, sumInsu
   return `${prefix} - ทุน ${Number(sumInsuredMax).toLocaleString('th-TH')}`;
 }
 
+interface PlanFormData {
+  insurers: Insurer[];
+  vehicleModels: VehicleModel[];
+  bundle: PlanBundle | null;
+}
+
 function buildInitialModalState(
   initialPlan: EditablePlanInput | null | undefined,
   canPublish: boolean,
-  isCopyMode = false
+  isCopyMode: boolean,
+  data: PlanFormData
 ) {
-  const insList = InsuranceStore.getInsurers();
-  const vehList = InsuranceStore.getVehicleModels();
+  const insList = data.insurers;
+  const vehList = data.vehicleModels;
   const defaultEffectiveFrom = getBangkokDateString(0);
   const defaultEffectiveTo = getBangkokDateString(365);
 
@@ -267,8 +281,7 @@ function buildInitialModalState(
     };
   }
 
-  const versions = InsuranceStore.getVersions()
-    .filter((v) => v.plan_id === initialPlan.id)
+  const versions = [...(data.bundle?.plan.versions ?? [])]
     .sort((a, b) => b.version_no - a.version_no);
   const publishedVer = versions.find((v) => v.workflow_status === 'published');
   const latestVer = publishedVer ?? versions[0];
@@ -308,7 +321,7 @@ function buildInitialModalState(
   let documentMimeType: string | null = null;
 
   if (latestVer) {
-    const rule = InsuranceStore.getEligibilityRules().find((r) => r.plan_version_id === latestVer.id);
+    const rule = (data.bundle?.rules ?? []).find((r) => r.plan_version_id === latestVer.id);
     if (rule) {
       scopeType = rule.scope_type || 'all_models';
       vehicleModelId = rule.vehicle_model_id || '';
@@ -319,7 +332,7 @@ function buildInitialModalState(
       inspectionRequired = rule.inspection_required ?? false;
       ageBasis = rule.age_basis || 'registration_year';
 
-      const options = InsuranceStore.getPriceOptions().filter((o) => o.eligibility_rule_id === rule.id);
+      const options = (data.bundle?.options ?? []).filter((o) => o.eligibility_rule_id === rule.id);
       if (options.length > 0) {
         priceOptionsList = options.map((o) => {
           const sumVal = o.sum_insured_max ?? o.sum_insured_min;
@@ -341,13 +354,13 @@ function buildInitialModalState(
       }
     }
 
-    const vCoverages = InsuranceStore.getVersionCoverages().filter(
+    const vCoverages = (data.bundle?.versionCoverages ?? []).filter(
       (vc) => vc.plan_version_id === latestVer.id
     );
     if (vCoverages.length > 0) {
       const isType1 = (initialPlan.insurance_type || '') === 'ชั้น 1';
       const is2Plus = (initialPlan.insurance_type || '').includes('2+');
-      coveragesState = MOCK_COVERAGE_TYPES.map((ct) => {
+      coveragesState = STANDARD_COVERAGE_TYPES.map((ct) => {
         const found = vCoverages.find((vc) => vc.coverage_type_id === ct.id);
         let status: CoverageStatus = found?.status ?? 'unknown';
         let limitAmount: number | string = found?.limit_amount ?? '';
@@ -381,7 +394,7 @@ function buildInitialModalState(
       });
     }
 
-    const docs = InsuranceStore.getDocuments().filter((d) => d.plan_version_id === latestVer.id);
+    const docs = (data.bundle?.documents ?? []).filter((d) => d.plan_version_id === latestVer.id);
     if (docs.length > 0) {
       documentTitle = docs[0].title;
       documentRef = docs[0].page_reference || '';
@@ -441,7 +454,7 @@ export function PlanFormModal({
   if (!isOpen) return null;
 
   return (
-    <PlanFormModalBody
+    <PlanFormLoader
       key={`${initialPlan?.id ?? 'create'}-${initialPlan?.currentStatus ?? 'new'}-${
         isCopyMode ? 'copy' : 'edit'
       }`}
@@ -453,16 +466,61 @@ export function PlanFormModal({
   );
 }
 
+function PlanFormLoader(props: Omit<PlanFormModalProps, 'isOpen'>) {
+  const planId = props.initialPlan?.id;
+  const [data, setData] = useState<PlanFormData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    Promise.all([
+      getPlanFormReferenceAction().then(unwrap),
+      planId ? getPlanBundleAction(planId).then(unwrap) : Promise.resolve(null),
+    ])
+      .then(([reference, bundle]) => {
+        if (isMounted) setData({ ...reference, bundle });
+      })
+      .catch((err: Error) => {
+        if (isMounted) setError(err.message);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [planId]);
+
+  if (!data) {
+    return (
+      <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl p-6 text-center space-y-3 max-w-sm">
+          <p className="text-sm text-slate-700">{error ?? 'กำลังโหลดข้อมูลแพ็กเกจ...'}</p>
+          {error && (
+            <button
+              type="button"
+              onClick={props.onClose}
+              className="bg-slate-100 text-slate-800 px-4 py-2 rounded-xl text-xs font-bold cursor-pointer"
+            >
+              ปิด
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return <PlanFormModalBody {...props} data={data} />;
+}
+
 function PlanFormModalBody({
   onClose,
   onSaved,
   initialPlan,
   isCopyMode = false,
-}: Omit<PlanFormModalProps, 'isOpen'>) {
+  data,
+}: Omit<PlanFormModalProps, 'isOpen'> & { data: PlanFormData }) {
   const { userName, can } = useAuth();
   const canPublish = can('canPublish');
 
-  const [init] = useState(() => buildInitialModalState(initialPlan, canPublish, isCopyMode));
+  const [init] = useState(() => buildInitialModalState(initialPlan, canPublish, isCopyMode, data));
 
   const insurers: Insurer[] = init.insList;
   const vehicles: VehicleModel[] = init.vehList;
@@ -674,7 +732,7 @@ function PlanFormModalBody({
     );
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
 
@@ -789,7 +847,7 @@ function PlanFormModalBody({
         : undefined;
 
     try {
-      const saved = InsuranceStore.createOrUpdatePlan({
+      const saved = unwrap(await savePlanAction({
         planId: isEditingExistingPlan ? initialPlan?.id : undefined,
         versionId: targetVersionId,
         insurerId,
@@ -798,7 +856,6 @@ function PlanFormModalBody({
         workflowStatus: effectiveStatus,
         effectiveFrom: effectiveFrom || null,
         effectiveTo: effectiveTo || null,
-        actorName: userName,
         notes:
           saveMode === 'new_version' && isEditingExistingPlan
             ? notes || `ปรับปรุงข้อมูลจากรุ่นที่ ${currentVersionNo}`
@@ -849,7 +906,7 @@ function PlanFormModalBody({
         documentSourceUrl: documentSourceUrl.trim() || null,
         documentFileSize,
         documentMimeType,
-      });
+      }));
 
       onSaved(saved.plan.id);
       onClose();
@@ -860,7 +917,7 @@ function PlanFormModalBody({
     }
   };
 
-  const categories = Array.from(new Set(MOCK_COVERAGE_TYPES.map((c) => c.category)));
+  const categories = Array.from(new Set(STANDARD_COVERAGE_TYPES.map((c) => c.category)));
   const isLockedPublished =
     currentVersionStatus === 'published' || currentVersionStatus === 'archived';
 
@@ -885,7 +942,7 @@ function PlanFormModalBody({
               </span>
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              รองรับตารางหลายทุนและหลายเบี้ยในแพ็กเกจเดียวกัน (Multiple Price Tiers), เงื่อนไขรถ, ความคุ้มครอง {MOCK_COVERAGE_TYPES.length} หมวดมาตรฐาน, และเอกสารต้นทาง
+              รองรับตารางหลายทุนและหลายเบี้ยในแพ็กเกจเดียวกัน (Multiple Price Tiers), เงื่อนไขรถ, ความคุ้มครอง {STANDARD_COVERAGE_TYPES.length} หมวดมาตรฐาน, และเอกสารต้นทาง
             </p>
           </div>
           <button
@@ -1019,7 +1076,7 @@ function PlanFormModalBody({
                       if (
                         !initialPlan ||
                         confirm(
-                          `ต้องการรีเซ็ตตารางความคุ้มครอง ${MOCK_COVERAGE_TYPES.length} หมวดให้เป็นค่าเริ่มต้นของ "${newType}" หรือไม่? (กดยกเลิกเพื่อคงค่าที่ปรับแต่งไว้เดิม)`
+                          `ต้องการรีเซ็ตตารางความคุ้มครอง ${STANDARD_COVERAGE_TYPES.length} หมวดให้เป็นค่าเริ่มต้นของ "${newType}" หรือไม่? (กดยกเลิกเพื่อคงค่าที่ปรับแต่งไว้เดิม)`
                         )
                       ) {
                         applyCoveragePreset(newType);

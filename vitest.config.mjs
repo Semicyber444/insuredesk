@@ -6,8 +6,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   test: {
+    fileParallelism: false,
     globals: true,
     environment: 'node',
+    globalSetup: ['./tests/support/globalSetup.ts'],
+    env: { DATABASE_URL: process.env.TEST_DATABASE_URL ?? '' },
   },
   resolve: {
     alias: {

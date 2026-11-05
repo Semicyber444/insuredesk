@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { getInsurers } from '@/lib/queries/insurers';
-import { InsuranceStore } from '@/lib/store/insuranceStore';
+import { deleteInsurerAction, getInsurersAction, saveInsurerAction } from '@/lib/actions/insurance';
+import { unwrap } from '@/lib/actions/result';
+import { LoadError } from '@/components/ui/LoadError';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { InsurerSchema } from '@/lib/validation/schemas';
 import { Insurer } from '@/types/database';
@@ -20,7 +21,7 @@ import {
 } from 'lucide-react';
 
 export default function InsurersPage() {
-  const { userName, can } = useAuth();
+  const { can } = useAuth();
   const [insurers, setInsurers] = useState<Insurer[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -30,16 +31,25 @@ export default function InsurersPage() {
   const [isActive, setIsActive] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
   const [statusNotice, setStatusNotice] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadData = () => {
-    getInsurers().then(setInsurers);
+    getInsurersAction()
+      .then(unwrap)
+      .then(setInsurers)
+      .catch((err: Error) => setLoadError(err.message));
   };
 
   useEffect(() => {
     let isMounted = true;
-    getInsurers().then((res) => {
-      if (isMounted) setInsurers(res);
-    });
+    getInsurersAction()
+      .then(unwrap)
+      .then((res) => {
+        if (isMounted) setInsurers(res);
+      })
+      .catch((err: Error) => {
+        if (isMounted) setLoadError(err.message);
+      });
     return () => {
       isMounted = false;
     };
@@ -85,11 +95,13 @@ export default function InsurersPage() {
     setShowModal(true);
   };
 
-  const handleDelete = (id: string, insurerName: string) => {
+  const handleDelete = async (id: string, insurerName: string) => {
     if (confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบหรือปิดการใช้งานบริษัท "${insurerName}"?`)) {
-      const res = InsuranceStore.deleteInsurer(id, userName);
+      const res = await deleteInsurerAction(id);
       setStatusNotice(
-        res.mode === 'deactivated'
+        !res.ok
+          ? res.error
+          : res.data.mode === 'deactivated'
           ? `บริษัท "${insurerName}" มีแพ็กเกจผูกอยู่ ระบบจึงเปลี่ยนสถานะเป็น "ปิดใช้งาน" แทนการลบเพื่อรักษาข้อมูลอ้างอิง`
           : `ลบบริษัท "${insurerName}" เรียบร้อยแล้ว`
       );
@@ -97,7 +109,7 @@ export default function InsurersPage() {
     }
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
 
@@ -113,20 +125,23 @@ export default function InsurersPage() {
       return;
     }
 
-    InsuranceStore.saveInsurer(
-      {
-        id: editingId || undefined,
-        name: parsed.data.name,
-        contact_channels: parsed.data.contact_channels,
-        website: parsed.data.website || null,
-        is_active: parsed.data.is_active,
-      },
-      userName
-    );
+    const saved = await saveInsurerAction({
+      id: editingId || undefined,
+      name: parsed.data.name,
+      contact_channels: parsed.data.contact_channels,
+      website: parsed.data.website || null,
+      is_active: parsed.data.is_active,
+    });
+    if (!saved.ok) {
+      setErrorMsg(saved.error);
+      return;
+    }
 
     setShowModal(false);
     loadData();
   };
+
+  if (loadError) return <LoadError message={loadError} />;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">

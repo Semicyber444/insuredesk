@@ -3,10 +3,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { SearchFilters, InsuranceSearchResultItem } from '@/types/insurance';
 import { Insurer, VehicleModel, CoverageType } from '@/types/database';
-import { searchInsuranceOptions, buildSearchResultItems } from '@/lib/queries/search';
-import { getInsurers, getVehicleModels, getCoverageTypes } from '@/lib/queries/insurers';
-import { InsuranceStore } from '@/lib/store/insuranceStore';
-import { MOCK_INSURERS, MOCK_VEHICLE_MODELS, MOCK_COVERAGE_TYPES } from '@/lib/queries/mockData';
+import { getSearchReferenceDataAction, searchOptionsAction } from '@/lib/actions/insurance';
+import { unwrap } from '@/lib/actions/result';
+import { getCompareBasket, setCompareBasket } from '@/lib/compareBasket';
+import { LoadError } from '@/components/ui/LoadError';
 import { FilterSidebar } from '@/components/search/FilterSidebar';
 import { PriceOptionCard } from '@/components/search/PriceOptionCard';
 import { ComparisonFloatingDock } from '@/components/search/ComparisonFloatingDock';
@@ -19,9 +19,9 @@ export default function SearchPage() {
     sortBy: 'premium_asc',
   });
 
-  const [insurers, setInsurers] = useState<Insurer[]>(MOCK_INSURERS);
-  const [vehicleModels, setVehicleModels] = useState<VehicleModel[]>(MOCK_VEHICLE_MODELS);
-  const [coverageTypes, setCoverageTypes] = useState<CoverageType[]>(MOCK_COVERAGE_TYPES);
+  const [insurers, setInsurers] = useState<Insurer[]>([]);
+  const [vehicleModels, setVehicleModels] = useState<VehicleModel[]>([]);
+  const [coverageTypes, setCoverageTypes] = useState<CoverageType[]>([]);
   const [allOptionsPool, setAllOptionsPool] = useState<InsuranceSearchResultItem[]>([]);
 
   const [results, setResults] = useState<{
@@ -38,6 +38,7 @@ export default function SearchPage() {
 
   const [selectedForCompare, setSelectedForCompare] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const handleFilterChange = useCallback((nextFilters: SearchFilters) => {
     setIsLoading(true);
@@ -47,20 +48,22 @@ export default function SearchPage() {
   // Load dynamic reference data & saved compare basket on mount
   useEffect(() => {
     let isMounted = true;
-    Promise.all([getInsurers(true), getVehicleModels(), getCoverageTypes()]).then(
-      ([insList, vehList, covList]) => {
+    getSearchReferenceDataAction()
+      .then(unwrap)
+      .then((reference) => {
         if (!isMounted) return;
-        setInsurers(insList);
-        setVehicleModels(vehList);
-        setCoverageTypes(covList);
-        const pool = buildSearchResultItems();
-        setAllOptionsPool(pool);
-        const validIds = new Set(pool.map((p) => p.id));
-        const savedBasket = InsuranceStore.getCompareBasket().filter((id) => validIds.has(id));
+        setInsurers(reference.insurers);
+        setVehicleModels(reference.vehicleModels);
+        setCoverageTypes(reference.coverageTypes);
+        setAllOptionsPool(reference.pool);
+        const validIds = new Set(reference.pool.map((p) => p.id));
+        const savedBasket = getCompareBasket().filter((id) => validIds.has(id));
         setSelectedForCompare(savedBasket);
-        InsuranceStore.setCompareBasket(savedBasket);
-      }
-    );
+        setCompareBasket(savedBasket);
+      })
+      .catch((err: Error) => {
+        if (isMounted) setLoadError(err.message);
+      });
     return () => {
       isMounted = false;
     };
@@ -70,13 +73,17 @@ export default function SearchPage() {
   useEffect(() => {
     let isMounted = true;
 
-    searchInsuranceOptions(filters).then((res) => {
-      if (isMounted) {
-        setResults(res);
-        setAllOptionsPool(buildSearchResultItems());
-        setIsLoading(false);
-      }
-    });
+    searchOptionsAction(filters)
+      .then(unwrap)
+      .then((res) => {
+        if (isMounted) {
+          setResults(res);
+          setIsLoading(false);
+        }
+      })
+      .catch((err: Error) => {
+        if (isMounted) setLoadError(err.message);
+      });
 
     return () => {
       isMounted = false;
@@ -90,7 +97,7 @@ export default function SearchPage() {
         : prev.length >= 4
         ? prev
         : [...prev, id];
-      InsuranceStore.setCompareBasket(next);
+      setCompareBasket(next);
       return next;
     });
   };
@@ -98,15 +105,17 @@ export default function SearchPage() {
   const handleRemoveCompare = (id: string) => {
     setSelectedForCompare((prev) => {
       const next = prev.filter((x) => x !== id);
-      InsuranceStore.setCompareBasket(next);
+      setCompareBasket(next);
       return next;
     });
   };
 
   const handleClearCompare = () => {
     setSelectedForCompare([]);
-    InsuranceStore.setCompareBasket([]);
+    setCompareBasket([]);
   };
+
+  if (loadError) return <LoadError message={loadError} />;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

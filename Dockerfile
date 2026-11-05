@@ -15,13 +15,6 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Set environment variables for build (NEXT_PUBLIC_* are inlined at build time)
-ARG NEXT_PUBLIC_SUPABASE_URL
-ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
-ARG NEXT_PUBLIC_ENABLE_DEMO_AUTH=true
-ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
-ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
-ENV NEXT_PUBLIC_ENABLE_DEMO_AUTH=$NEXT_PUBLIC_ENABLE_DEMO_AUTH
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
@@ -43,6 +36,10 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
+# Needed to run migrations from the image: docker run ... node scripts/db.mjs migrate
+COPY --from=builder /app/db ./db
+COPY --from=builder /app/scripts ./scripts
+COPY --from=builder /app/src/lib/auth/password.mjs ./src/lib/auth/password.mjs
 
 RUN mkdir -p /app/storage/documents && chown -R nextjs:nodejs /app/storage
 

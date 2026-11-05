@@ -2,8 +2,15 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { getAllPlans, PlanListItem, submitForReview } from '@/lib/queries/plans';
-import { InsuranceStore } from '@/lib/store/insuranceStore';
+import type { PlanListItem } from '@/lib/queries/plans';
+import {
+  deletePlanAction,
+  getAllPlansAction,
+  restorePlanAction,
+  submitForReviewAction,
+} from '@/lib/actions/insurance';
+import { unwrap } from '@/lib/actions/result';
+import { LoadError } from '@/components/ui/LoadError';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { PlanFormModal } from '@/components/forms/PlanFormModal';
 import {
@@ -22,11 +29,12 @@ import {
 } from 'lucide-react';
 
 export default function PlansManagementPage() {
-  const { userName, can } = useAuth();
+  const { can } = useAuth();
   const [plans, setPlans] = useState<PlanListItem[]>([]);
   const [showArchived, setShowArchived] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [statusNotice, setStatusNotice] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -36,21 +44,29 @@ export default function PlansManagementPage() {
   const reloadData = useCallback(
     (includeArch = showArchived) => {
       setIsLoading(true);
-      getAllPlans(includeArch).then((res) => {
-        setPlans(res);
-        setIsLoading(false);
-      });
+      getAllPlansAction(includeArch)
+        .then(unwrap)
+        .then((res) => {
+          setPlans(res);
+          setIsLoading(false);
+        })
+        .catch((err: Error) => setLoadError(err.message));
     },
     [showArchived]
   );
 
   useEffect(() => {
     let isMounted = true;
-    getAllPlans(showArchived).then((res) => {
-      if (!isMounted) return;
-      setPlans(res);
-      setIsLoading(false);
-    });
+    getAllPlansAction(showArchived)
+      .then(unwrap)
+      .then((res) => {
+        if (!isMounted) return;
+        setPlans(res);
+        setIsLoading(false);
+      })
+      .catch((err: Error) => {
+        if (isMounted) setLoadError(err.message);
+      });
     return () => {
       isMounted = false;
     };
@@ -76,6 +92,8 @@ export default function PlansManagementPage() {
     );
   }
 
+  if (loadError) return <LoadError message={loadError} />;
+
   const handleOpenCreate = () => {
     setIsCopyMode(false);
     setEditingPlan(null);
@@ -96,25 +114,26 @@ export default function PlansManagementPage() {
 
   const handleSubmitReview = async (plan: PlanListItem) => {
     if (!plan.activeVersionId) return;
-    await submitForReview(
+    const result = await submitForReviewAction(
       plan.activeVersionId,
-      `ส่งตรวจสอบแพ็กเกจ "${plan.name}" รุ่นที่ ${plan.latestVersionNo}`,
-      userName
+      `ส่งตรวจสอบแพ็กเกจ "${plan.name}" รุ่นที่ ${plan.latestVersionNo}`
     );
-    setStatusNotice(`ส่งแพ็กเกจ "${plan.name}" เข้าสู่คิวตรวจสอบเรียบร้อยแล้ว`);
+    setStatusNotice(result.ok ? `ส่งแพ็กเกจ "${plan.name}" เข้าสู่คิวตรวจสอบเรียบร้อยแล้ว` : result.error);
     reloadData();
   };
 
-  const handleDelete = (plan: PlanListItem) => {
+  const handleDelete = async (plan: PlanListItem) => {
     const promptMsg =
       plan.currentStatus === 'published'
         ? `แพ็กเกจ "${plan.name}" มีประวัติเผยแพร่แล้ว ระบบจะจัดเก็บเข้ากรุ (Archive) แทนการลบทิ้งตามกฎ Section 8.1 ต้องการดำเนินการหรือไม่?`
         : `คุณแน่ใจหรือไม่ว่าต้องการลบแพ็กเกจร่าง "${plan.name}"?`;
 
     if (confirm(promptMsg)) {
-      const res = InsuranceStore.deletePlan(plan.id, userName);
+      const res = await deletePlanAction(plan.id);
       setStatusNotice(
-        res.mode === 'archived'
+        !res.ok
+          ? res.error
+          : res.data.mode === 'archived'
           ? `จัดเก็บแพ็กเกจ "${plan.name}" เข้ากรุ (Archived) เรียบร้อยแล้ว`
           : `ลบแพ็กเกจร่าง "${plan.name}" เรียบร้อยแล้ว`
       );
@@ -122,9 +141,9 @@ export default function PlansManagementPage() {
     }
   };
 
-  const handleRestore = (plan: PlanListItem) => {
-    InsuranceStore.restorePlan(plan.id, userName);
-    setStatusNotice(`กู้คืนแพ็กเกจ "${plan.name}" กลับมาใช้งานเรียบร้อยแล้ว`);
+  const handleRestore = async (plan: PlanListItem) => {
+    const res = await restorePlanAction(plan.id);
+    setStatusNotice(res.ok ? `กู้คืนแพ็กเกจ "${plan.name}" กลับมาใช้งานเรียบร้อยแล้ว` : res.error);
     reloadData();
   };
 

@@ -3,9 +3,12 @@
 import { useState, useEffect, use, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { getPlanById, PlanDetailData, submitForReview } from '@/lib/queries/plans';
-import { resolveCoverages } from '@/lib/queries/search';
-import { InsuranceStore } from '@/lib/store/insuranceStore';
+import type { PlanBundle } from '@/lib/queries/plans';
+import { resolveCoverages } from '@/lib/queries/coverage';
+import { getPlanBundleAction, submitForReviewAction } from '@/lib/actions/insurance';
+import { unwrap } from '@/lib/actions/result';
+import { getCompareBasket, setCompareBasket as saveCompareBasket } from '@/lib/compareBasket';
+import { LoadError } from '@/components/ui/LoadError';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { PlanFormModal } from '@/components/forms/PlanFormModal';
 import { formatRegistrationZoneLabel } from '@/types/insurance';
@@ -38,10 +41,12 @@ export default function PlanDetailPage({ params, searchParams }: Props) {
   const planId = resolvedParams.id;
   const initialOptionId = resolvedSearchParams.optionId;
 
-  const { activeRole, userName, can } = useAuth();
+  const { activeRole, can } = useAuth();
   const router = useRouter();
 
-  const [plan, setPlan] = useState<PlanDetailData | null>(null);
+  const [bundle, setBundle] = useState<PlanBundle | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
   const [compareBasket, setCompareBasket] = useState<string[]>([]);
@@ -51,25 +56,35 @@ export default function PlanDetailPage({ params, searchParams }: Props) {
 
   const reloadData = useCallback(() => {
     setIsLoading(true);
-    getPlanById(planId).then((res) => {
-      setPlan(res);
-      setCompareBasket(InsuranceStore.getCompareBasket());
-      setIsLoading(false);
-    });
+    getPlanBundleAction(planId)
+      .then(unwrap)
+      .then((res) => {
+        setBundle(res);
+        setCompareBasket(getCompareBasket());
+        setIsLoading(false);
+      })
+      .catch((err: Error) => setLoadError(err.message));
   }, [planId]);
 
   useEffect(() => {
     let isMounted = true;
-    getPlanById(planId).then((res) => {
-      if (!isMounted) return;
-      setPlan(res);
-      setCompareBasket(InsuranceStore.getCompareBasket());
-      setIsLoading(false);
-    });
+    getPlanBundleAction(planId)
+      .then(unwrap)
+      .then((res) => {
+        if (!isMounted) return;
+        setBundle(res);
+        setCompareBasket(getCompareBasket());
+        setIsLoading(false);
+      })
+      .catch((err: Error) => {
+        if (isMounted) setLoadError(err.message);
+      });
     return () => {
       isMounted = false;
     };
   }, [planId]);
+
+  if (loadError) return <LoadError message={loadError} />;
 
   if (isLoading) {
     return (
@@ -79,7 +94,9 @@ export default function PlanDetailPage({ params, searchParams }: Props) {
     );
   }
 
-  if (!plan) {
+  const plan = bundle?.plan;
+
+  if (!bundle || !plan) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-16 text-center">
         <h2 className="text-lg font-bold text-slate-800">ไม่พบแพ็กเกจที่ระบุ</h2>
@@ -121,28 +138,21 @@ export default function PlanDetailPage({ params, searchParams }: Props) {
   const activeVersion =
     visibleVersions.find((v) => v.id === selectedVersionId) ?? defaultVersion;
 
-  const allRules = InsuranceStore.getEligibilityRules();
-  const rules = allRules.filter((r) => r.plan_version_id === activeVersion?.id);
+  const rules = bundle.rules.filter((r) => r.plan_version_id === activeVersion?.id);
   const ruleIds = rules.map((r) => r.id);
 
-  const allOptions = InsuranceStore.getPriceOptions();
-  const options = allOptions.filter((o) => ruleIds.includes(o.eligibility_rule_id));
+  const options = bundle.options.filter((o) => ruleIds.includes(o.eligibility_rule_id));
 
-  const allDocs = InsuranceStore.getDocuments();
-  const docs = allDocs.filter((d) => d.plan_version_id === activeVersion?.id);
+  const docs = bundle.documents.filter((d) => d.plan_version_id === activeVersion?.id);
 
-  const versionIdSet = new Set(plan.versions.map((v) => v.id));
-  const allAudit = InsuranceStore.getAuditLogs();
-  const auditLogs = allAudit.filter(
-    (a) => versionIdSet.has(a.entity_id) || a.entity_id === plan.id
-  );
+  const auditLogs = bundle.auditLogs;
 
-  const vehicleModels = InsuranceStore.getVehicleModels();
+  const vehicleModels = bundle.vehicleModels;
 
   const activeOptionId = selectedOptionId || initialOptionId || options[0]?.id;
   const selectedOption = options.find((o) => o.id === activeOptionId) || options[0];
   const coverages =
-    activeVersion && selectedOption ? resolveCoverages(activeVersion.id, selectedOption.id) : [];
+    activeVersion && selectedOption ? resolveCoverages(activeVersion.id, selectedOption.id, bundle.coverageData) : [];
 
   const isInBasket = selectedOption ? compareBasket.includes(selectedOption.id) : false;
 
@@ -153,17 +163,17 @@ export default function PlanDetailPage({ params, searchParams }: Props) {
       : compareBasket.length >= 4
       ? compareBasket
       : [...compareBasket, selectedOption.id];
-    InsuranceStore.setCompareBasket(next);
+    saveCompareBasket(next);
     setCompareBasket(next);
   };
 
   const handleSubmitDraftForReview = async () => {
     if (!activeVersion) return;
-    await submitForReview(
+    const result = await submitForReviewAction(
       activeVersion.id,
-      `ส่งตรวจสอบแพ็กเกจ "${plan.name}" รุ่นที่ ${activeVersion.version_no}`,
-      userName
+      `ส่งตรวจสอบแพ็กเกจ "${plan.name}" รุ่นที่ ${activeVersion.version_no}`
     );
+    setActionError(result.ok ? null : result.error);
     reloadData();
   };
 
@@ -179,6 +189,10 @@ export default function PlanDetailPage({ params, searchParams }: Props) {
           <span>กลับไปหน้ารายการค้นหา</span>
         </Link>
       </div>
+
+      {actionError && (
+        <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700">{actionError}</div>
+      )}
 
       {/* Plan Header Card */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs">

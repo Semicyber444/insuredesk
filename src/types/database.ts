@@ -23,6 +23,14 @@ export type SourceType =
   | 'manual_note'
   | 'other';
 
+export interface AppUser {
+  id: string;
+  email: string;
+  display_name: string;
+  is_active: boolean;
+  roles: AppRole[];
+}
+
 export interface Profile {
   user_id: string;
   display_name: string;
@@ -112,6 +120,7 @@ export interface PriceOption {
   id: string;
   eligibility_rule_id: string;
   label: string;
+  sort_order?: number;
   repair_type: RepairType;
   price_type: PriceType;
   net_premium?: number | null;

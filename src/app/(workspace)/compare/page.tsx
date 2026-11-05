@@ -3,8 +3,11 @@
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useState, useEffect, Suspense, Fragment } from 'react';
 import Link from 'next/link';
-import { getComparisonData, ComparisonResult } from '@/lib/queries/compare';
-import { InsuranceStore } from '@/lib/store/insuranceStore';
+import type { ComparisonResult } from '@/lib/queries/compare';
+import { getComparisonAction } from '@/lib/actions/insurance';
+import { unwrap } from '@/lib/actions/result';
+import { getCompareBasket, setCompareBasket } from '@/lib/compareBasket';
+import { LoadError } from '@/components/ui/LoadError';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { InsuranceSearchResultItem, formatRegistrationZoneLabel } from '@/types/insurance';
 import {
@@ -30,6 +33,7 @@ function CompareContent() {
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [onlyDifferences, setOnlyDifferences] = useState(false);
   const [isWarningsOpen, setIsWarningsOpen] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const isLoading = loadedKey !== currentKey;
 
@@ -44,19 +48,22 @@ function CompareContent() {
   useEffect(() => {
     let isMounted = true;
     const urlIds = idsParam ? idsParam.split(',').filter(Boolean).slice(0, 4) : [];
-    const targetIds = urlIds.length >= 2 ? urlIds : InsuranceStore.getCompareBasket().slice(0, 4);
+    const targetIds = urlIds.length >= 2 ? urlIds : getCompareBasket().slice(0, 4);
 
     if (urlIds.length >= 2) {
-      InsuranceStore.setCompareBasket(urlIds);
+      setCompareBasket(urlIds);
     }
 
     Promise.resolve()
-      .then(() => (targetIds.length >= 2 ? getComparisonData(targetIds) : null))
+      .then(async () => (targetIds.length >= 2 ? unwrap(await getComparisonAction(targetIds)) : null))
       .then((res) => {
         if (isMounted) {
           setData(res);
           setLoadedKey(currentKey);
         }
+      })
+      .catch((err: Error) => {
+        if (isMounted) setLoadError(err.message);
       });
 
     return () => {
@@ -67,7 +74,7 @@ function CompareContent() {
   const handleRemoveOption = (optionIdToRemove: string) => {
     if (!data) return;
     const remainingIds = data.options.filter((o) => o.id !== optionIdToRemove).map((o) => o.id);
-    InsuranceStore.setCompareBasket(remainingIds);
+    setCompareBasket(remainingIds);
     if (remainingIds.length >= 2) {
       router.push(`/compare?ids=${remainingIds.join(',')}`);
     } else {
@@ -76,13 +83,15 @@ function CompareContent() {
   };
 
   const handleClearAll = () => {
-    InsuranceStore.setCompareBasket([]);
+    setCompareBasket([]);
     router.push('/search');
   };
 
   const handlePrint = () => {
     window.print();
   };
+
+  if (loadError) return <LoadError message={loadError} />;
 
   if (isLoading) {
     return (

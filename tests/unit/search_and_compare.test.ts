@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { searchInsuranceOptions, resolveCoverages } from '@/lib/queries/search';
+import { describe, it, expect, beforeEach, afterAll } from 'vitest';
+import { searchInsuranceOptions, resolveCoverages, loadCoverageData } from '@/lib/queries/search';
 import { generateComparisonWarnings, getComparisonData } from '@/lib/queries/compare';
 import {
   submitForReview,
@@ -9,11 +9,17 @@ import {
 } from '@/lib/queries/plans';
 import { getAuditLogs } from '@/lib/queries/audit';
 import { InsuranceStore } from '@/lib/store/insuranceStore';
+import { getPool } from '@/lib/db/mysql';
+import { resetDatabase } from '../support/resetDatabase';
 import { PlanVersionSchema, PriceOptionSchema, EligibilityRuleSchema } from '@/lib/validation/schemas';
 import { InsuranceSearchResultItem } from '@/types/insurance';
 
-beforeEach(() => {
-  InsuranceStore.resetMemoryStore();
+beforeEach(async () => {
+  await resetDatabase();
+});
+
+afterAll(async () => {
+  await getPool().end();
 });
 
 describe('1. Search & Filtering Business Rules (Section 10)', () => {
@@ -61,7 +67,7 @@ describe('1. Search & Filtering Business Rules (Section 10)', () => {
   });
 
   it('should exclude scope_type = unknown when filtering by vehicleBrand or vehicleModelId (Section 10.2)', async () => {
-    InsuranceStore.createOrUpdatePlan({
+    await InsuranceStore.createOrUpdatePlan({
       insurerId: '20000000-0000-0000-0000-000000000001',
       name: 'แผนทดสอบไม่ระบุขอบเขตรถ',
       insuranceType: 'ชั้น 1',
@@ -94,10 +100,11 @@ describe('1. Search & Filtering Business Rules (Section 10)', () => {
     expect(byModel.items.length).toBe(0);
   });
 
-  it('should apply option_coverage_overrides accurately in resolveCoverages (Section 8.3)', () => {
+  it('should apply option_coverage_overrides accurately in resolveCoverages (Section 8.3)', async () => {
     const coverages = resolveCoverages(
       '50000000-0000-0000-0000-000000000001',
-      '70000000-0000-0000-0000-000000000003'
+      '70000000-0000-0000-0000-000000000003',
+      await loadCoverageData()
     );
     const ownDamage = coverages.find((c) => c.code === 'own_damage');
     expect(ownDamage?.isOverridden).toBe(true);
@@ -123,7 +130,7 @@ describe('1. Search & Filtering Business Rules (Section 10)', () => {
   });
 
   it('should filter by registration plate zone (bangkok_only vs upcountry/metro) and emit registration_zone_diff warning', async () => {
-    InsuranceStore.createOrUpdatePlan({
+    await InsuranceStore.createOrUpdatePlan({
       insurerId: '20000000-0000-0000-0000-000000000001',
       name: 'แผนพิเศษเฉพาะรถป้าย กทม.',
       insuranceType: 'ชั้น 2+',
@@ -241,7 +248,7 @@ describe('2. Comparison Warnings & Formatting Logic (Section 9 & 11)', () => {
   });
 
   it('should format covered items with null limits as คุ้มครอง (ยังไม่ระบุวงเงิน) (Section 9.4)', async () => {
-    const { plan } = InsuranceStore.createOrUpdatePlan({
+    const { plan } = await InsuranceStore.createOrUpdatePlan({
       insurerId: '20000000-0000-0000-0000-000000000001',
       name: 'แผนทดสอบไม่ระบุวงเงิน',
       insuranceType: 'ชั้น 1',
@@ -320,7 +327,7 @@ describe('4. Versioning, Workflow Persistence & Archive Rules (Section 8.1 & 12)
   });
 
   it('should persist submitForReview, rejectPlanVersion, and publishPlanVersion with audit logs and archive old versions', async () => {
-    const { plan, version: v1 } = InsuranceStore.createOrUpdatePlan({
+    const { plan, version: v1 } = await InsuranceStore.createOrUpdatePlan({
       insurerId: '20000000-0000-0000-0000-000000000001',
       name: 'แผนทดสอบ Workflow รุ่น 1',
       insuranceType: 'ชั้น 2+',
@@ -329,7 +336,7 @@ describe('4. Versioning, Workflow Persistence & Archive Rules (Section 8.1 & 12)
     });
 
     // Create draft v2 on the same plan
-    const { version: v2 } = InsuranceStore.createOrUpdatePlan({
+    const { version: v2 } = await InsuranceStore.createOrUpdatePlan({
       planId: plan.id,
       insurerId: '20000000-0000-0000-0000-000000000001',
       name: 'แผนทดสอบ Workflow รุ่น 2',
@@ -338,16 +345,16 @@ describe('4. Versioning, Workflow Persistence & Archive Rules (Section 8.1 & 12)
       documentTitle: 'ตารางเบี้ยรุ่น 2',
     });
 
-    await submitForReview(v2.id, 'ส่งตรวจรุ่น 2', 'กัญญา Editor');
+    await submitForReview(v2.id, 'ส่งตรวจรุ่น 2', { id: null, name: 'กัญญา Editor' });
     let fetched = await getPlanById(plan.id);
     expect(fetched?.versions.find((v) => v.id === v2.id)?.workflow_status).toBe('in_review');
 
-    await rejectPlanVersion(v2.id, 'ขอแก้หมายเหตุ', 'ปวีณา Reviewer');
+    await rejectPlanVersion(v2.id, 'ขอแก้หมายเหตุ', { id: null, name: 'ปวีณา Reviewer' });
     fetched = await getPlanById(plan.id);
     expect(fetched?.versions.find((v) => v.id === v2.id)?.workflow_status).toBe('draft');
 
-    await submitForReview(v2.id, 'ส่งตรวจรอบสอง', 'กัญญา Editor');
-    await publishPlanVersion(v2.id, 'อนุมัติรุ่น 2', 'ปวีณา Reviewer');
+    await submitForReview(v2.id, 'ส่งตรวจรอบสอง', { id: null, name: 'กัญญา Editor' });
+    await publishPlanVersion(v2.id, 'อนุมัติรุ่น 2', { id: null, name: 'ปวีณา Reviewer' });
 
     fetched = await getPlanById(plan.id);
     expect(fetched?.versions.find((v) => v.id === v2.id)?.workflow_status).toBe('published');
@@ -355,7 +362,7 @@ describe('4. Versioning, Workflow Persistence & Archive Rules (Section 8.1 & 12)
     expect(fetched?.versions.find((v) => v.id === v1.id)?.workflow_status).toBe('archived');
 
     // Deleting a published plan must archive rather than hard-delete
-    const delRes = InsuranceStore.deletePlan(plan.id, 'สมชาย Admin');
+    const delRes = await InsuranceStore.deletePlan(plan.id, { id: null, name: 'สมชาย Admin' });
     expect(delRes.mode).toBe('archived');
     const archivedPlan = await getPlanById(plan.id);
     expect(archivedPlan?.is_archived).toBe(true);
@@ -367,7 +374,7 @@ describe('4. Versioning, Workflow Persistence & Archive Rules (Section 8.1 & 12)
   });
 
   it('should persist uploaded source document metadata (storage_path, source_url, file_size, mime_type)', async () => {
-    const { plan, version } = InsuranceStore.createOrUpdatePlan({
+    const { plan, version } = await InsuranceStore.createOrUpdatePlan({
       insurerId: '20000000-0000-0000-0000-000000000001',
       name: 'Chubb 2+ Country Road',
       insuranceType: 'ชั้น 2+',
@@ -383,7 +390,7 @@ describe('4. Versioning, Workflow Persistence & Archive Rules (Section 8.1 & 12)
 
     const detail = await getPlanById(plan.id);
     expect(detail?.versions.some((v) => v.id === version.id)).toBe(true);
-    const docs = InsuranceStore.getDocuments().filter((d) => d.plan_version_id === version.id);
+    const docs = (await InsuranceStore.getDocuments()).filter((d) => d.plan_version_id === version.id);
     expect(docs.length).toBe(1);
     expect(docs[0].source_url).toBe('/api/documents/1793498200-a1b2c3d4.pdf');
     expect(docs[0].storage_path).toBe('storage/documents/1793498200-a1b2c3d4.pdf');
@@ -392,7 +399,7 @@ describe('4. Versioning, Workflow Persistence & Archive Rules (Section 8.1 & 12)
   });
 
   it('should copy/duplicate an insurance plan independently with registrationZone, price tiers, coverages, and document', async () => {
-    const { plan: sourcePlan, version: sourceVer } = InsuranceStore.createOrUpdatePlan({
+    const { plan: sourcePlan, version: sourceVer } = await InsuranceStore.createOrUpdatePlan({
       insurerId: '20000000-0000-0000-0000-000000000003',
       name: 'BKI Metro Special 2+',
       insuranceType: 'ชั้น 2+',
@@ -411,33 +418,33 @@ describe('4. Versioning, Workflow Persistence & Archive Rules (Section 8.1 & 12)
       ],
     });
 
-    const copied = InsuranceStore.duplicatePlan(sourcePlan.id, 'สมชาย ผู้ดูแลระบบ');
+    const copied = await InsuranceStore.duplicatePlan(sourcePlan.id, { id: null, name: 'สมชาย ผู้ดูแลระบบ' });
     expect(copied).not.toBeNull();
     expect(copied!.plan.id).not.toBe(sourcePlan.id);
     expect(copied!.plan.name).toBe('BKI Metro Special 2+ (สำเนา)');
     expect(copied!.version.workflow_status).toBe('draft');
     expect(copied!.version.id).not.toBe(sourceVer.id);
 
-    const copiedRule = InsuranceStore.getEligibilityRules().find(
+    const copiedRule = (await InsuranceStore.getEligibilityRules()).find(
       (r) => r.plan_version_id === copied!.version.id
     );
     expect(copiedRule?.registration_zone).toBe('bangkok_only');
     expect(copiedRule?.max_age).toBe(12);
 
-    const sourceRule = InsuranceStore.getEligibilityRules().find(
+    const sourceRule = (await InsuranceStore.getEligibilityRules()).find(
       (r) => r.plan_version_id === sourceVer.id
     );
-    const sourceOpts = InsuranceStore.getPriceOptions().filter(
+    const sourceOpts = (await InsuranceStore.getPriceOptions()).filter(
       (o) => o.eligibility_rule_id === sourceRule?.id
     );
-    const copiedOpts = InsuranceStore.getPriceOptions().filter(
+    const copiedOpts = (await InsuranceStore.getPriceOptions()).filter(
       (o) => o.eligibility_rule_id === copiedRule?.id
     );
     expect(copiedOpts.length).toBe(2);
     expect(copiedOpts[0].id).not.toBe(sourceOpts[0].id);
     expect(copiedOpts[1].sum_insured_max).toBe(200000);
 
-    const copiedDocs = InsuranceStore.getDocuments().filter(
+    const copiedDocs = (await InsuranceStore.getDocuments()).filter(
       (d) => d.plan_version_id === copied!.version.id
     );
     expect(copiedDocs.length).toBe(1);

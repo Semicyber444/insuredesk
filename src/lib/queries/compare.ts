@@ -3,7 +3,7 @@ import {
   InsuranceSearchResultItem,
   formatRegistrationZoneLabel,
 } from '@/types/insurance';
-import { getBangkokDateString } from '@/lib/store/insuranceStore';
+import { getBangkokDateString } from '@/lib/date';
 import { buildSearchResultItems } from './search';
 
 export interface ComparisonResult {
@@ -164,7 +164,7 @@ export function generateComparisonWarnings(options: InsuranceSearchResultItem[])
 }
 
 export async function getComparisonData(optionIds: string[]): Promise<ComparisonResult> {
-  const all = buildSearchResultItems();
+  const all = await buildSearchResultItems();
   const selectedOptions = optionIds
     .map((id) => all.find((item) => item.id === id))
     .filter((item): item is InsuranceSearchResultItem => !!item);
