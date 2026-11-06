@@ -7,7 +7,7 @@ import type { ComparisonResult } from '@/lib/queries/compare';
 import { getComparisonAction } from '@/lib/actions/insurance';
 import { unwrap } from '@/lib/actions/result';
 import { getCompareBasket, setCompareBasket } from '@/lib/compareBasket';
-import { getBangkokDateString } from '@/lib/date';
+import { getBangkokDateString, getQuoteValidity } from '@/lib/date';
 import { LoadError } from '@/components/ui/LoadError';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { InsuranceSearchResultItem, formatCarAgeRange, formatRegistrationZoneLabel } from '@/types/insurance';
@@ -300,18 +300,10 @@ function CompareContent() {
     day: 'numeric',
   });
   // The quote is good for 30 days, but never past the day any compared price or plan version ends.
-  const QUOTE_DAYS = 30;
-  const DAY_MS = 86_400_000;
-  const startOfToday = new Date(`${getBangkokDateString(0)}T00:00:00+07:00`);
-  const quoteEnd = new Date(startOfToday.getTime() + QUOTE_DAYS * DAY_MS);
-  const earliestEnd = options
-    .flatMap((o) => [o.priceValidTo, o.versionEffectiveTo])
-    .filter((d): d is string => Boolean(d))
-    .map((d) => new Date(`${d}T00:00:00+07:00`))
-    .reduce<Date | null>((min, d) => (!min || d < min ? d : min), null);
-  const validUntilDate = earliestEnd && earliestEnd < quoteEnd ? earliestEnd : quoteEnd;
-  const validDays = Math.round((validUntilDate.getTime() - startOfToday.getTime()) / DAY_MS);
-  const isCappedByPlan = validUntilDate !== quoteEnd;
+  const { until: validUntilDate, days: validDays, capped: isCappedByPlan } = getQuoteValidity(
+    getBangkokDateString(0),
+    options.flatMap((o) => [o.priceValidTo, o.versionEffectiveTo])
+  );
   const validUntilThai = validUntilDate.toLocaleDateString('th-TH', {
     timeZone: 'Asia/Bangkok',
     year: 'numeric',
@@ -509,7 +501,7 @@ function CompareContent() {
                 <span className="font-bold text-red-700">ราคาบางแผนหมดอายุแล้ว (สิ้นสุด {validUntilThai})</span>
               ) : (
                 <span className="font-bold text-slate-900">
-                  {validDays} วัน (ถึงวันที่ {validUntilThai}
+                  {validDays === 0 ? 'ถึงสิ้นวันนี้' : `${validDays} วัน`} (ถึงวันที่ {validUntilThai}
                   {isCappedByPlan ? ' ตามวันสิ้นสุดราคาของแผน' : ''})
                 </span>
               )}
