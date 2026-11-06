@@ -33,7 +33,7 @@ export function PriceOptionCard({
           <span className="text-sm font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 w-fit">
             ยังไม่มีข้อมูลราคา
           </span>
-          <span className="text-[11px] text-slate-400 mt-0.5">
+          <span className="text-[11px] text-slate-500 mt-0.5">
             ต้องติดต่อบริษัทเพื่อเช็คเบี้ย • {compulsoryText}
           </span>
         </div>
@@ -93,7 +93,7 @@ export function PriceOptionCard({
       );
     }
     return (
-      <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded font-medium bg-slate-100 text-slate-500">
+      <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded font-medium bg-slate-100 text-slate-600">
         <MinusCircle className="w-3 h-3" />
         {label}: ไม่คุ้มครอง
       </span>
@@ -153,7 +153,7 @@ export function PriceOptionCard({
             isSelectedForCompare
               ? 'bg-blue-600 text-white shadow-xs'
               : !canSelectMore
-              ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+              ? 'bg-slate-100 text-slate-500 cursor-not-allowed'
               : 'bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-700'
           }`}
         >
@@ -175,7 +175,7 @@ export function PriceOptionCard({
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 py-4 border-b border-slate-100">
         {/* Price */}
         <div>
-          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">
+          <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">
             เบี้ยประกันรวม
           </span>
           {renderPrice()}
@@ -183,7 +183,7 @@ export function PriceOptionCard({
 
         {/* Sum Insured */}
         <div>
-          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">
+          <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">
             ทุนประกันภัย
           </span>
           <div className="text-lg font-bold text-slate-800">
@@ -192,7 +192,7 @@ export function PriceOptionCard({
             ) : item.sumInsuredMin ? (
               `฿${item.sumInsuredMin.toLocaleString('th-TH')}`
             ) : (
-              <span className="text-slate-400 text-sm">ยังไม่ระบุทุน</span>
+              <span className="text-slate-500 text-sm">ยังไม่ระบุทุน</span>
             )}
           </div>
           <span className="text-[11px] text-slate-500">
@@ -206,7 +206,7 @@ export function PriceOptionCard({
 
         {/* Deductibles */}
         <div>
-          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">
+          <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">
             ค่าเสียหายส่วนแรก (Deductible)
           </span>
           <div className="text-lg font-bold text-slate-800">
@@ -224,7 +224,7 @@ export function PriceOptionCard({
 
       {/* Quick Coverage Badges */}
       <div className="flex flex-wrap items-center gap-2 pt-3">
-        <span className="text-[11px] text-slate-400 font-medium mr-1">ความคุ้มครองหลัก:</span>
+        <span className="text-[11px] text-slate-500 font-medium mr-1">ความคุ้มครองหลัก:</span>
         {renderCoverageBadge('ชนตัวรถ', ownDamage?.status)}
         {renderCoverageBadge('พลิกคว่ำ/ตกทาง', rollover?.status)}
         {renderCoverageBadge('รถหาย/ไฟไหม้', theftFire?.status)}
@@ -234,7 +234,7 @@ export function PriceOptionCard({
       {/* Card Footer: Source document & Detail Link */}
       <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-100 text-xs">
         <div className="flex items-center gap-2 text-slate-500">
-          <FileText className="w-3.5 h-3.5 text-slate-400" />
+          <FileText className="w-3.5 h-3.5 text-slate-500" />
           <span>
             {item.documents.length > 0 ? (
               <span className="font-medium text-slate-600">มีเอกสารอ้างอิง ({item.documents.length})</span>
@@ -243,7 +243,7 @@ export function PriceOptionCard({
             )}
           </span>
           {item.verifiedAt && (
-            <span className="hidden sm:inline text-slate-400">
+            <span className="hidden sm:inline text-slate-500">
               • ตรวจทานเมื่อ {new Date(item.verifiedAt).toLocaleDateString('th-TH')}
             </span>
           )}

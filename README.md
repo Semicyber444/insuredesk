@@ -1,36 +1,61 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# InsureDesk
 
-## Getting Started
+ระบบค้นหาและเปรียบเทียบประกันรถยนต์ภายในทีม สร้างด้วย Next.js และ MySQL
 
-First, run the development server:
+## เริ่มใช้งาน
+
+ต้องมี Node.js 22 ขึ้นไป และ MySQL 8.0.16 ขึ้นไป
+
+```bash
+npm install
+```
+
+```bash
+cp .env.example .env.local
+```
+
+แก้ `DATABASE_URL` ใน `.env.local` ให้ตรงกับ MySQL ของคุณ แล้วสร้างตารางและใส่ข้อมูลตัวอย่าง:
+
+```bash
+npm run db:migrate
+```
+
+```bash
+npm run db:seed
+```
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+เปิด <http://localhost:3000> แล้วเลือกบัญชีจำลองในหน้าเข้าสู่ระบบ (เมื่อตั้ง `ENABLE_DEMO_AUTH=true`)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## คำสั่งฐานข้อมูล
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| คำสั่ง | หน้าที่ |
+|---|---|
+| `npm run db:migrate` | สร้างฐานข้อมูลถ้ายังไม่มี และรัน `db/migrations/*.sql` ที่ยังไม่เคยรัน |
+| `npm run db:seed` | ใส่ข้อมูลตัวอย่างจาก `db/seed.sql` (ไม่ทำงานถ้ามีแพ็กเกจอยู่แล้ว) |
+| `npm run db:reset` | ลบฐานข้อมูลใน `DATABASE_URL` แล้วสร้างใหม่พร้อมข้อมูลตัวอย่าง |
+| `npm run db:create-user` | สร้างบัญชีผู้ใช้จริง |
 
-## Learn More
+สร้างบัญชีผู้ดูแลระบบคนแรก (รหัสผ่านอย่างน้อย 12 ตัวอักษร):
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+INSUREDESK_USER_PASSWORD='change-me-please' npm run db:create-user -- --email admin@example.com --name "ชื่อผู้ดูแล" --role admin
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## การทดสอบ
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Test รันกับ MySQL จริง ตั้ง `TEST_DATABASE_URL` เป็นฐานข้อมูลที่ชื่อลงท้ายด้วย `_test` ซึ่งจะถูกลบและสร้างใหม่ทุกครั้ง
 
-## Deploy on Vercel
+```bash
+npm test
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Production
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- ตั้ง `DATABASE_URL` ตอนรันแอป และรัน `node scripts/db.mjs migrate` ก่อนเริ่มแอป
+- ไม่ต้องรัน `db:seed` และห้ามตั้ง `ENABLE_DEMO_AUTH=true`
+- เอกสารที่อัปโหลดเก็บใน `storage/documents` ต้องใช้ดิสก์ถาวรและสำรองคู่กับฐานข้อมูล
+- ห้ามเปิดพอร์ต MySQL สู่ภายนอก เพราะการตรวจสิทธิ์อยู่ที่ชั้นแอป

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import {
   Insurer,
   VehicleModel,
@@ -14,9 +14,17 @@ import {
   SourceType,
   CompulsoryInclusion,
 } from '@/types/database';
-import { InsuranceStore, getBangkokDateString } from '@/lib/store/insuranceStore';
-import { MOCK_COVERAGE_TYPES } from '@/lib/queries/mockData';
+import { getBangkokDateString } from '@/lib/date';
+import { STANDARD_COVERAGE_TYPES } from '@/lib/constants/coverageTypes';
+import {
+  getPlanBundleAction,
+  getPlanFormReferenceAction,
+  savePlanAction,
+} from '@/lib/actions/insurance';
+import { unwrap } from '@/lib/actions/result';
+import type { PlanBundle } from '@/lib/queries/plans';
 import { useAuth } from '@/lib/auth/AuthContext';
+import { Modal } from '@/components/ui/Modal';
 import {
   PlanSchema,
   PlanVersionSchema,
@@ -89,7 +97,7 @@ function buildCoveragePreset(type: InsuranceType): CoverageItemState[] {
   const is3Plus = type === 'ชั้น 3+';
   const isType2 = type === 'ชั้น 2';
 
-  return MOCK_COVERAGE_TYPES.map((ct) => {
+  return STANDARD_COVERAGE_TYPES.map((ct) => {
     let status: CoverageStatus = 'covered';
     let limitAmount: number | string = '';
     let limitBasis = '';
@@ -208,13 +216,20 @@ function formatAutoLabel(repairType: RepairType, hasSumInsured: boolean, sumInsu
   return `${prefix} - ทุน ${Number(sumInsuredMax).toLocaleString('th-TH')}`;
 }
 
+interface PlanFormData {
+  insurers: Insurer[];
+  vehicleModels: VehicleModel[];
+  bundle: PlanBundle | null;
+}
+
 function buildInitialModalState(
   initialPlan: EditablePlanInput | null | undefined,
   canPublish: boolean,
-  isCopyMode = false
+  isCopyMode: boolean,
+  data: PlanFormData
 ) {
-  const insList = InsuranceStore.getInsurers();
-  const vehList = InsuranceStore.getVehicleModels();
+  const insList = data.insurers;
+  const vehList = data.vehicleModels;
   const defaultEffectiveFrom = getBangkokDateString(0);
   const defaultEffectiveTo = getBangkokDateString(365);
 
@@ -267,8 +282,7 @@ function buildInitialModalState(
     };
   }
 
-  const versions = InsuranceStore.getVersions()
-    .filter((v) => v.plan_id === initialPlan.id)
+  const versions = [...(data.bundle?.plan.versions ?? [])]
     .sort((a, b) => b.version_no - a.version_no);
   const publishedVer = versions.find((v) => v.workflow_status === 'published');
   const latestVer = publishedVer ?? versions[0];
@@ -308,7 +322,7 @@ function buildInitialModalState(
   let documentMimeType: string | null = null;
 
   if (latestVer) {
-    const rule = InsuranceStore.getEligibilityRules().find((r) => r.plan_version_id === latestVer.id);
+    const rule = (data.bundle?.rules ?? []).find((r) => r.plan_version_id === latestVer.id);
     if (rule) {
       scopeType = rule.scope_type || 'all_models';
       vehicleModelId = rule.vehicle_model_id || '';
@@ -319,7 +333,7 @@ function buildInitialModalState(
       inspectionRequired = rule.inspection_required ?? false;
       ageBasis = rule.age_basis || 'registration_year';
 
-      const options = InsuranceStore.getPriceOptions().filter((o) => o.eligibility_rule_id === rule.id);
+      const options = (data.bundle?.options ?? []).filter((o) => o.eligibility_rule_id === rule.id);
       if (options.length > 0) {
         priceOptionsList = options.map((o) => {
           const sumVal = o.sum_insured_max ?? o.sum_insured_min;
@@ -341,13 +355,13 @@ function buildInitialModalState(
       }
     }
 
-    const vCoverages = InsuranceStore.getVersionCoverages().filter(
+    const vCoverages = (data.bundle?.versionCoverages ?? []).filter(
       (vc) => vc.plan_version_id === latestVer.id
     );
     if (vCoverages.length > 0) {
       const isType1 = (initialPlan.insurance_type || '') === 'ชั้น 1';
       const is2Plus = (initialPlan.insurance_type || '').includes('2+');
-      coveragesState = MOCK_COVERAGE_TYPES.map((ct) => {
+      coveragesState = STANDARD_COVERAGE_TYPES.map((ct) => {
         const found = vCoverages.find((vc) => vc.coverage_type_id === ct.id);
         let status: CoverageStatus = found?.status ?? 'unknown';
         let limitAmount: number | string = found?.limit_amount ?? '';
@@ -381,7 +395,7 @@ function buildInitialModalState(
       });
     }
 
-    const docs = InsuranceStore.getDocuments().filter((d) => d.plan_version_id === latestVer.id);
+    const docs = (data.bundle?.documents ?? []).filter((d) => d.plan_version_id === latestVer.id);
     if (docs.length > 0) {
       documentTitle = docs[0].title;
       documentRef = docs[0].page_reference || '';
@@ -441,7 +455,7 @@ export function PlanFormModal({
   if (!isOpen) return null;
 
   return (
-    <PlanFormModalBody
+    <PlanFormLoader
       key={`${initialPlan?.id ?? 'create'}-${initialPlan?.currentStatus ?? 'new'}-${
         isCopyMode ? 'copy' : 'edit'
       }`}
@@ -453,16 +467,61 @@ export function PlanFormModal({
   );
 }
 
+function PlanFormLoader(props: Omit<PlanFormModalProps, 'isOpen'>) {
+  const planId = props.initialPlan?.id;
+  const [data, setData] = useState<PlanFormData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    Promise.all([
+      getPlanFormReferenceAction().then(unwrap),
+      planId ? getPlanBundleAction(planId).then(unwrap) : Promise.resolve(null),
+    ])
+      .then(([reference, bundle]) => {
+        if (isMounted) setData({ ...reference, bundle });
+      })
+      .catch((err: Error) => {
+        if (isMounted) setError(err.message);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [planId]);
+
+  if (!data) {
+    return (
+      <Modal label="โหลดข้อมูลแพ็กเกจ" onRequestClose={props.onClose} className="bg-slate-900/50 p-4">
+        <div className="bg-white rounded-2xl p-6 text-center space-y-3 max-w-sm">
+          <p role={error ? 'alert' : 'status'} className="text-sm text-slate-700">{error ?? 'กำลังโหลดข้อมูลแพ็กเกจ...'}</p>
+          {error && (
+            <button
+              type="button"
+              onClick={props.onClose}
+              className="bg-slate-100 text-slate-800 px-4 py-2 rounded-xl text-xs font-bold cursor-pointer"
+            >
+              ปิด
+            </button>
+          )}
+        </div>
+      </Modal>
+    );
+  }
+
+  return <PlanFormModalBody {...props} data={data} />;
+}
+
 function PlanFormModalBody({
   onClose,
   onSaved,
   initialPlan,
   isCopyMode = false,
-}: Omit<PlanFormModalProps, 'isOpen'>) {
+  data,
+}: Omit<PlanFormModalProps, 'isOpen'> & { data: PlanFormData }) {
   const { userName, can } = useAuth();
   const canPublish = can('canPublish');
 
-  const [init] = useState(() => buildInitialModalState(initialPlan, canPublish, isCopyMode));
+  const [init] = useState(() => buildInitialModalState(initialPlan, canPublish, isCopyMode, data));
 
   const insurers: Insurer[] = init.insList;
   const vehicles: VehicleModel[] = init.vehList;
@@ -674,7 +733,7 @@ function PlanFormModalBody({
     );
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
 
@@ -789,7 +848,7 @@ function PlanFormModalBody({
         : undefined;
 
     try {
-      const saved = InsuranceStore.createOrUpdatePlan({
+      const saved = unwrap(await savePlanAction({
         planId: isEditingExistingPlan ? initialPlan?.id : undefined,
         versionId: targetVersionId,
         insurerId,
@@ -798,7 +857,6 @@ function PlanFormModalBody({
         workflowStatus: effectiveStatus,
         effectiveFrom: effectiveFrom || null,
         effectiveTo: effectiveTo || null,
-        actorName: userName,
         notes:
           saveMode === 'new_version' && isEditingExistingPlan
             ? notes || `ปรับปรุงข้อมูลจากรุ่นที่ ${currentVersionNo}`
@@ -849,7 +907,7 @@ function PlanFormModalBody({
         documentSourceUrl: documentSourceUrl.trim() || null,
         documentFileSize,
         documentMimeType,
-      });
+      }));
 
       onSaved(saved.plan.id);
       onClose();
@@ -860,17 +918,24 @@ function PlanFormModalBody({
     }
   };
 
-  const categories = Array.from(new Set(MOCK_COVERAGE_TYPES.map((c) => c.category)));
+  const categories = Array.from(new Set(STANDARD_COVERAGE_TYPES.map((c) => c.category)));
+
+  // Escape is easy to hit by accident and this form can hold a lot of unsaved work.
+  const handleEscape = () => {
+    if (!isSubmitting && window.confirm('ปิดฟอร์มนี้หรือไม่? ข้อมูลที่ยังไม่ได้บันทึกจะหายไป')) {
+      onClose();
+    }
+  };
   const isLockedPublished =
     currentVersionStatus === 'published' || currentVersionStatus === 'archived';
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+    <Modal labelledBy="plan-modal-title" onRequestClose={handleEscape} className="bg-slate-900/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
       <div className="bg-white rounded-3xl max-w-4xl w-full p-6 sm:p-8 shadow-2xl border border-slate-200 my-6 animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[92vh]">
         {/* Modal Header */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-100 shrink-0">
           <div>
-            <h2 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+            <h2 id="plan-modal-title" className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
               {isCopyMode ? (
                 <Copy className="w-5 h-5 text-emerald-600" />
               ) : (
@@ -885,13 +950,14 @@ function PlanFormModalBody({
               </span>
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              รองรับตารางหลายทุนและหลายเบี้ยในแพ็กเกจเดียวกัน (Multiple Price Tiers), เงื่อนไขรถ, ความคุ้มครอง {MOCK_COVERAGE_TYPES.length} หมวดมาตรฐาน, และเอกสารต้นทาง
+              รองรับตารางหลายทุนและหลายเบี้ยในแพ็กเกจเดียวกัน (Multiple Price Tiers), เงื่อนไขรถ, ความคุ้มครอง {STANDARD_COVERAGE_TYPES.length} หมวดมาตรฐาน, และเอกสารต้นทาง
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+            aria-label="ปิดฟอร์ม"
+            className="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -924,7 +990,7 @@ function PlanFormModalBody({
         </div>
 
         {errorMsg && (
-          <div className="my-3 p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-center gap-2 shrink-0">
+          <div role="alert" className="my-3 p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-center gap-2 shrink-0">
             <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
             <span>{errorMsg}</span>
           </div>
@@ -994,8 +1060,9 @@ function PlanFormModalBody({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">บริษัทประกันภัย *</label>
+                  <label htmlFor="plan-insurerId" className="font-semibold text-slate-700 block mb-1">บริษัทประกันภัย *</label>
                   <select
+                    id="plan-insurerId"
                     required
                     value={insurerId}
                     onChange={(e) => setInsurerId(e.target.value)}
@@ -1010,8 +1077,9 @@ function PlanFormModalBody({
                 </div>
 
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">ประเภทประกันภัย *</label>
+                  <label htmlFor="plan-insuranceType" className="font-semibold text-slate-700 block mb-1">ประเภทประกันภัย *</label>
                   <select
+                    id="plan-insuranceType"
                     value={insuranceType}
                     onChange={(e) => {
                       const newType = e.target.value as InsuranceType;
@@ -1019,7 +1087,7 @@ function PlanFormModalBody({
                       if (
                         !initialPlan ||
                         confirm(
-                          `ต้องการรีเซ็ตตารางความคุ้มครอง ${MOCK_COVERAGE_TYPES.length} หมวดให้เป็นค่าเริ่มต้นของ "${newType}" หรือไม่? (กดยกเลิกเพื่อคงค่าที่ปรับแต่งไว้เดิม)`
+                          `ต้องการรีเซ็ตตารางความคุ้มครอง ${STANDARD_COVERAGE_TYPES.length} หมวดให้เป็นค่าเริ่มต้นของ "${newType}" หรือไม่? (กดยกเลิกเพื่อคงค่าที่ปรับแต่งไว้เดิม)`
                         )
                       ) {
                         applyCoveragePreset(newType);
@@ -1037,8 +1105,9 @@ function PlanFormModalBody({
               </div>
 
               <div>
-                <label className="font-semibold text-slate-700 block mb-1">ชื่อแพ็กเกจประกัน *</label>
+                <label htmlFor="plan-name" className="font-semibold text-slate-700 block mb-1">ชื่อแพ็กเกจประกัน *</label>
                 <input
+                  id="plan-name"
                   type="text"
                   required
                   placeholder="เช่น วิริยะ ซุปเปอร์โปรเทค พรีเมียม หรือ ธนชาต 2+ ฟิต อุ่นใจ"
@@ -1050,8 +1119,9 @@ function PlanFormModalBody({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">วันเริ่มมีผลบังคับใช้</label>
+                  <label htmlFor="plan-effectiveFrom" className="font-semibold text-slate-700 block mb-1">วันเริ่มมีผลบังคับใช้</label>
                   <input
+                    id="plan-effectiveFrom"
                     type="date"
                     value={effectiveFrom}
                     onChange={(e) => setEffectiveFrom(e.target.value)}
@@ -1059,8 +1129,9 @@ function PlanFormModalBody({
                   />
                 </div>
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">วันสิ้นสุดผลบังคับใช้</label>
+                  <label htmlFor="plan-effectiveTo" className="font-semibold text-slate-700 block mb-1">วันสิ้นสุดผลบังคับใช้</label>
                   <input
+                    id="plan-effectiveTo"
                     type="date"
                     value={effectiveTo}
                     onChange={(e) => setEffectiveTo(e.target.value)}
@@ -1071,8 +1142,9 @@ function PlanFormModalBody({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">สถานะข้อมูล (Workflow Status)</label>
+                  <label htmlFor="plan-workflowStatus" className="font-semibold text-slate-700 block mb-1">สถานะข้อมูล (Workflow Status)</label>
                   <select
+                    id="plan-workflowStatus"
                     value={workflowStatus}
                     onChange={(e) =>
                       setWorkflowStatus(e.target.value as 'draft' | 'in_review' | 'published')
@@ -1088,8 +1160,9 @@ function PlanFormModalBody({
                 </div>
 
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">หมายเหตุของรุ่น (Version Notes)</label>
+                  <label htmlFor="plan-notes" className="font-semibold text-slate-700 block mb-1">หมายเหตุของรุ่น (Version Notes)</label>
                   <input
+                    id="plan-notes"
                     type="text"
                     placeholder="เช่น อัตราเบี้ยปี 2569 ได้รับอนุมัติแล้ว"
                     value={notes}
@@ -1106,8 +1179,9 @@ function PlanFormModalBody({
             <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">ขอบเขตรุ่นรถที่รับประกัน</label>
+                  <label htmlFor="plan-scopeType" className="font-semibold text-slate-700 block mb-1">ขอบเขตรุ่นรถที่รับประกัน</label>
                   <select
+                    id="plan-scopeType"
                     value={scopeType}
                     onChange={(e) => setScopeType(e.target.value as ScopeType)}
                     className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500"
@@ -1120,8 +1194,9 @@ function PlanFormModalBody({
 
                 {scopeType === 'specific_model' && (
                   <div>
-                    <label className="font-semibold text-slate-700 block mb-1">เลือกรุ่นรถเฉพาะ *</label>
+                    <label htmlFor="plan-vehicleModelId" className="font-semibold text-slate-700 block mb-1">เลือกรุ่นรถเฉพาะ *</label>
                     <select
+                      id="plan-vehicleModelId"
                       value={vehicleModelId}
                       onChange={(e) => setVehicleModelId(e.target.value)}
                       className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500"
@@ -1139,8 +1214,9 @@ function PlanFormModalBody({
 
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">อายุรถขั้นต่ำ (ปี)</label>
+                  <label htmlFor="plan-minCarAge" className="font-semibold text-slate-700 block mb-1">อายุรถขั้นต่ำ (ปี)</label>
                   <input
+                    id="plan-minCarAge"
                     type="number"
                     min={0}
                     value={minCarAge}
@@ -1149,8 +1225,9 @@ function PlanFormModalBody({
                   />
                 </div>
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">อายุรถสูงสุด (ปี)</label>
+                  <label htmlFor="plan-maxCarAge" className="font-semibold text-slate-700 block mb-1">อายุรถสูงสุด (ปี)</label>
                   <input
+                    id="plan-maxCarAge"
                     type="number"
                     min={0}
                     value={maxCarAge}
@@ -1159,8 +1236,9 @@ function PlanFormModalBody({
                   />
                 </div>
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">เกณฑ์นับอายุรถ</label>
+                  <label htmlFor="plan-ageBasis" className="font-semibold text-slate-700 block mb-1">เกณฑ์นับอายุรถ</label>
                   <select
+                    id="plan-ageBasis"
                     value={ageBasis}
                     onChange={(e) =>
                       setAgeBasis(e.target.value as 'registration_year' | 'manufacture_year')
@@ -1175,8 +1253,9 @@ function PlanFormModalBody({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">ลักษณะการใช้งาน</label>
+                  <label htmlFor="plan-usageType" className="font-semibold text-slate-700 block mb-1">ลักษณะการใช้งาน</label>
                   <select
+                    id="plan-usageType"
                     value={usageType}
                     onChange={(e) => setUsageType(e.target.value as 'private' | 'commercial' | 'all')}
                     className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl"
@@ -1188,10 +1267,11 @@ function PlanFormModalBody({
                 </div>
 
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">
+                  <label htmlFor="plan-registrationZone" className="font-semibold text-slate-700 block mb-1">
                     เงื่อนไขเขตป้ายทะเบียนรถ
                   </label>
                   <select
+                    id="plan-registrationZone"
                     value={registrationZone}
                     onChange={(e) => setRegistrationZone(e.target.value as RegistrationZone)}
                     className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500"
@@ -1261,6 +1341,7 @@ function PlanFormModalBody({
                           value={tier.label}
                           onChange={(e) => handleUpdateTierField(idx, 'label', e.target.value)}
                           placeholder={`ชื่อตัวเลือกที่ ${idx + 1}`}
+                          aria-label={`ชื่อตัวเลือกราคาที่ ${idx + 1}`}
                           className="font-bold text-slate-800 text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 w-full max-w-sm"
                         />
                       </div>
@@ -1280,8 +1361,9 @@ function PlanFormModalBody({
                           <button
                             type="button"
                             onClick={() => handleRemoveTier(idx)}
-                            className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
+                            className="p-1 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
                             title="ลบตัวเลือกราคานี้"
+                            aria-label="ลบตัวเลือกราคานี้"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -1292,7 +1374,7 @@ function PlanFormModalBody({
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="font-semibold text-slate-700">ทุนประกันภัย (บาท)</label>
+                          <label htmlFor={`plan-tier-${idx}-sumInsuredMax`} className="font-semibold text-slate-700">ทุนประกันภัย (บาท)</label>
                           <label className="text-[10px] text-slate-500 flex items-center gap-1 cursor-pointer">
                             <input
                               type="checkbox"
@@ -1307,6 +1389,7 @@ function PlanFormModalBody({
                         </div>
                         {tier.hasSumInsured ? (
                           <input
+                            id={`plan-tier-${idx}-sumInsuredMax`}
                             type="number"
                             min={0}
                             step={10000}
@@ -1326,7 +1409,7 @@ function PlanFormModalBody({
 
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="font-semibold text-slate-700">เบี้ยประกันรวม (บาท)</label>
+                          <label htmlFor={`plan-tier-${idx}-premiumTotal`} className="font-semibold text-slate-700">เบี้ยประกันรวม (บาท)</label>
                           <label className="text-[10px] text-slate-500 flex items-center gap-1 cursor-pointer">
                             <input
                               type="checkbox"
@@ -1341,6 +1424,7 @@ function PlanFormModalBody({
                         </div>
                         {tier.hasPrice ? (
                           <input
+                            id={`plan-tier-${idx}-premiumTotal`}
                             type="number"
                             min={0}
                             step={100}
@@ -1359,8 +1443,9 @@ function PlanFormModalBody({
                       </div>
 
                       <div>
-                        <label className="font-semibold text-slate-700 block mb-1">ลักษณะการซ่อม *</label>
+                        <label htmlFor={`plan-tier-${idx}-repairType`} className="font-semibold text-slate-700 block mb-1">ลักษณะการซ่อม *</label>
                         <select
+                          id={`plan-tier-${idx}-repairType`}
                           value={tier.repairType}
                           onChange={(e) =>
                             handleUpdateTierField(idx, 'repairType', e.target.value as RepairType)
@@ -1375,10 +1460,11 @@ function PlanFormModalBody({
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
                       <div>
-                        <label className="font-semibold text-slate-700 block mb-1">
+                        <label htmlFor={`plan-tier-${idx}-deductibleAmount`} className="font-semibold text-slate-700 block mb-1">
                           ค่าเสียหายส่วนแรก Deductible (บาท)
                         </label>
                         <input
+                          id={`plan-tier-${idx}-deductibleAmount`}
                           type="number"
                           min={0}
                           step={1000}
@@ -1392,8 +1478,9 @@ function PlanFormModalBody({
                       </div>
 
                       <div>
-                        <label className="font-semibold text-slate-700 block mb-1">การรวม พ.ร.บ.</label>
+                        <label htmlFor={`plan-tier-${idx}-compulsoryIncluded`} className="font-semibold text-slate-700 block mb-1">การรวม พ.ร.บ.</label>
                         <select
+                          id={`plan-tier-${idx}-compulsoryIncluded`}
                           value={tier.compulsoryIncluded}
                           onChange={(e) =>
                             handleUpdateTierField(
@@ -1411,8 +1498,9 @@ function PlanFormModalBody({
                       </div>
 
                       <div>
-                        <label className="font-semibold text-slate-700 block mb-1">เงื่อนไขผู้ขับขี่</label>
+                        <label htmlFor={`plan-tier-${idx}-driverConditions`} className="font-semibold text-slate-700 block mb-1">เงื่อนไขผู้ขับขี่</label>
                         <input
+                          id={`plan-tier-${idx}-driverConditions`}
                           type="text"
                           placeholder="เช่น ไม่จำกัดชื่อ หรือ ระบุอายุ"
                           value={tier.driverConditions}
@@ -1498,11 +1586,11 @@ function PlanFormModalBody({
                                   className={`px-2 py-1 rounded-md text-[11px] font-semibold border transition cursor-pointer ${
                                     cov.status === opt.value
                                       ? opt.value === 'covered'
-                                        ? 'bg-emerald-600 border-emerald-600 text-white'
+                                        ? 'bg-emerald-700 border-emerald-700 text-white'
                                         : opt.value === 'not_covered'
                                         ? 'bg-slate-700 border-slate-700 text-white'
                                         : opt.value === 'optional'
-                                        ? 'bg-amber-600 border-amber-600 text-white'
+                                        ? 'bg-amber-700 border-amber-700 text-white'
                                         : 'bg-blue-600 border-blue-600 text-white'
                                       : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                                   }`}
@@ -1520,6 +1608,7 @@ function PlanFormModalBody({
                                   type="number"
                                   min={0}
                                   placeholder="วงเงิน (บาท)"
+                                  aria-label={`${cov.name}: วงเงิน (บาท)`}
                                   value={cov.limitAmount}
                                   onChange={(e) =>
                                     handleCoverageFieldChange(cov.code, 'limitAmount', e.target.value)
@@ -1531,6 +1620,7 @@ function PlanFormModalBody({
                                 <input
                                   type="text"
                                   placeholder="เกณฑ์วงเงิน เช่น ตามทุน, ต่อครั้ง"
+                                  aria-label={`${cov.name}: เกณฑ์วงเงิน`}
                                   value={cov.limitBasis}
                                   onChange={(e) =>
                                     handleCoverageFieldChange(cov.code, 'limitBasis', e.target.value)
@@ -1542,6 +1632,7 @@ function PlanFormModalBody({
                                 <input
                                   type="text"
                                   placeholder="เงื่อนไขความคุ้มครอง"
+                                  aria-label={`${cov.name}: เงื่อนไขความคุ้มครอง`}
                                   value={cov.terms}
                                   onChange={(e) =>
                                     handleCoverageFieldChange(cov.code, 'terms', e.target.value)
@@ -1553,6 +1644,7 @@ function PlanFormModalBody({
                                 <input
                                   type="text"
                                   placeholder="ข้อยกเว้น (ถ้ามี)"
+                                  aria-label={`${cov.name}: ข้อยกเว้น`}
                                   value={cov.exclusions}
                                   onChange={(e) =>
                                     handleCoverageFieldChange(cov.code, 'exclusions', e.target.value)
@@ -1585,11 +1677,13 @@ function PlanFormModalBody({
 
               {/* File Upload Zone / Attached File Preview */}
               <div>
-                <label className="font-semibold text-slate-700 block mb-1.5">
+                <label htmlFor="plan-document-file" className="font-semibold text-slate-700 block mb-1.5">
                   ไฟล์เอกสารแนบ (PDF, รูปภาพ PNG/JPG/WEBP, หรือ Excel/CSV ไม่เกิน 15 MB)
                 </label>
 
                 <input
+
+                  id="plan-document-file"
                   ref={fileInputRef}
                   type="file"
                   accept=".pdf,.png,.jpg,.jpeg,.webp,.xlsx,.xls,.csv"
@@ -1650,7 +1744,8 @@ function PlanFormModalBody({
                         type="button"
                         onClick={handleClearUploadedFile}
                         title="ลบไฟล์ที่แนบ"
-                        className="p-1.5 rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 transition cursor-pointer"
+                        aria-label="ลบไฟล์ที่แนบ"
+                        className="p-1.5 rounded-xl text-slate-500 hover:text-red-600 hover:bg-red-50 transition cursor-pointer"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -1706,8 +1801,9 @@ function PlanFormModalBody({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">ประเภทเอกสาร</label>
+                  <label htmlFor="plan-sourceType" className="font-semibold text-slate-700 block mb-1">ประเภทเอกสาร</label>
                   <select
+                    id="plan-sourceType"
                     value={sourceType}
                     onChange={(e) => setSourceType(e.target.value as SourceType)}
                     className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl"
@@ -1722,10 +1818,11 @@ function PlanFormModalBody({
                 </div>
 
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">
+                  <label htmlFor="plan-documentTitle" className="font-semibold text-slate-700 block mb-1">
                     ชื่อเอกสารอ้างอิง {workflowStatus === 'published' ? '*' : ''}
                   </label>
                   <input
+                    id="plan-documentTitle"
                     type="text"
                     placeholder="เช่น ตารางเบี้ยประกันภัยวิริยะ ซุปเปอร์โปรเทค 2569"
                     value={documentTitle}
@@ -1737,8 +1834,9 @@ function PlanFormModalBody({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">จุดอ้างอิง / เลขหน้าในเอกสาร</label>
+                  <label htmlFor="plan-documentRef" className="font-semibold text-slate-700 block mb-1">จุดอ้างอิง / เลขหน้าในเอกสาร</label>
                   <input
+                    id="plan-documentRef"
                     type="text"
                     placeholder="เช่น หน้า 3-5 ตารางเบี้ยรถกลุ่ม 3, 4"
                     value={documentRef}
@@ -1749,10 +1847,11 @@ function PlanFormModalBody({
 
                 {!documentSourceUrl.startsWith('/api/documents/') && (
                   <div>
-                    <label className="font-semibold text-slate-700 block mb-1">
+                    <label htmlFor="plan-documentSourceUrl" className="font-semibold text-slate-700 block mb-1">
                       ลิงก์เอกสารภายนอก (ถ้าไม่ได้อัปโหลดไฟล์)
                     </label>
                     <input
+                      id="plan-documentSourceUrl"
                       type="url"
                       placeholder="เช่น https://drive.google.com/..."
                       value={documentSourceUrl}
@@ -1792,6 +1891,6 @@ function PlanFormModalBody({
           </div>
         </form>
       </div>
-    </div>
+    </Modal>
   );
 }

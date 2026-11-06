@@ -1,16 +1,38 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Users, UserPlus, Mail, Lock } from 'lucide-react';
-import { DEMO_USERS } from '@/lib/auth/demoUsers';
+import { getUsersAction } from '@/lib/actions/insurance';
+import { unwrap } from '@/lib/actions/result';
+import { LoadError } from '@/components/ui/LoadError';
+import type { AppUser } from '@/types/database';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { getRoleBadgeClass, getRoleLabelThai } from '@/lib/permissions/roles';
 
 export default function UsersManagementPage() {
   const { can } = useAuth();
-  const usersList = Object.values(DEMO_USERS);
+  const canManageUsers = can('canManageUsers');
+  const [usersList, setUsersList] = useState<AppUser[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  if (!can('canManageUsers')) {
+  useEffect(() => {
+    if (!canManageUsers) return;
+    let isMounted = true;
+    getUsersAction()
+      .then(unwrap)
+      .then((res) => {
+        if (isMounted) setUsersList(res);
+      })
+      .catch((err: Error) => {
+        if (isMounted) setLoadError(err.message);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [canManageUsers]);
+
+  if (!canManageUsers) {
     return (
       <div className="max-w-xl mx-auto px-4 py-20 text-center space-y-3">
         <div className="w-14 h-14 rounded-2xl bg-red-50 text-red-600 border border-red-200 flex items-center justify-center mx-auto">
@@ -30,6 +52,8 @@ export default function UsersManagementPage() {
     );
   }
 
+  if (loadError) return <LoadError message={loadError} />;
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -39,14 +63,14 @@ export default function UsersManagementPage() {
             <span>จัดการสมาชิกและบทบาท (Team Members)</span>
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            จำกัดการเข้าใช้งานเฉพาะผู้ที่ได้รับเชิญผ่าน Supabase Auth Invitation เท่านั้น
+            จำกัดการเข้าใช้งานเฉพาะบัญชีที่ผู้ดูแลระบบสร้างให้เท่านั้น
           </p>
         </div>
 
         <button
           type="button"
           onClick={() =>
-            alert('สามารถเชิญสมาชิกจริงเพิ่มเติมได้ผ่านเมนู Authentication -> Users -> Invite user บน Supabase Dashboard')
+            alert('เพิ่มสมาชิกจริงได้ด้วยคำสั่ง npm run db:create-user บนเซิร์ฟเวอร์ (ดูรายละเอียดใน README)')
           }
           className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-xs transition self-start sm:self-auto cursor-pointer"
         >
@@ -62,18 +86,18 @@ export default function UsersManagementPage() {
         <div className="divide-y divide-slate-100">
           {usersList.map((u) => (
             <div
-              key={u.user.id}
+              key={u.id}
               className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
             >
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-800 flex items-center justify-center font-bold text-sm">
-                  {u.profile.display_name.charAt(0)}
+                  {u.display_name.charAt(0)}
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900">{u.profile.display_name}</h3>
+                  <h3 className="text-sm font-bold text-slate-900">{u.display_name}</h3>
                   <div className="flex items-center gap-2 text-xs text-slate-500">
                     <Mail className="w-3.5 h-3.5" />
-                    <span>{u.user.email}</span>
+                    <span>{u.email}</span>
                   </div>
                 </div>
               </div>

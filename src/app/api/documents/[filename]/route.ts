@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { getCurrentSession } from '@/lib/auth/session';
+import { hasPermission } from '@/lib/permissions/roles';
+import { InsuranceStore } from '@/lib/store/insuranceStore';
 
 const CONTENT_TYPES: Record<string, string> = {
   pdf: 'application/pdf',
@@ -35,6 +37,13 @@ export async function GET(
     filename.includes('..')
   ) {
     return NextResponse.json({ error: 'ชื่อไฟล์ไม่ถูกต้อง' }, { status: 400 });
+  }
+
+  // Viewers only see published documents. Answer 404, not 403, so a draft's existence isn't revealed.
+  const canSeeUnpublished =
+    hasPermission(session.roles, 'canEditDraft') || hasPermission(session.roles, 'canReview');
+  if (!canSeeUnpublished && !(await InsuranceStore.isPublishedDocument(`storage/documents/${filename}`))) {
+    return NextResponse.json({ error: 'ไม่พบไฟล์เอกสารบนเซิร์ฟเวอร์' }, { status: 404 });
   }
 
   const ext = path.extname(filename).toLowerCase().replace(/^\./, '');

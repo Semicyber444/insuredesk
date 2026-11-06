@@ -18,7 +18,7 @@ import {
 import { AppRole } from '@/types/database';
 import { getRoleBadgeClass, getRoleLabelThai } from '@/lib/permissions/roles';
 import { useAuth } from '@/lib/auth/AuthContext';
-import { createClient } from '@/lib/supabase/client';
+import { logoutAction } from '@/lib/actions/auth';
 import { useState } from 'react';
 
 export function Navbar() {
@@ -38,16 +38,9 @@ export function Navbar() {
   ];
 
   const handleLogout = async () => {
-    try {
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-      if (supabaseUrl && !supabaseUrl.includes('example')) {
-        const supabase = createClient();
-        await supabase.auth.signOut();
-      }
-    } catch {
-      // Ignore sign-out errors in demo mode
-    }
+    await logoutAction();
     router.push('/login');
+    router.refresh();
   };
 
   return (
@@ -129,7 +122,7 @@ export function Navbar() {
                 type="button"
                 onClick={handleLogout}
                 title="ออกจากระบบ / สลับบัญชี"
-                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
+                className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
               >
                 <LogOut className="w-4 h-4" />
               </button>

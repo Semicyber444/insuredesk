@@ -3,8 +3,11 @@
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useState, useEffect, Suspense, Fragment } from 'react';
 import Link from 'next/link';
-import { getComparisonData, ComparisonResult } from '@/lib/queries/compare';
-import { InsuranceStore } from '@/lib/store/insuranceStore';
+import type { ComparisonResult } from '@/lib/queries/compare';
+import { getComparisonAction } from '@/lib/actions/insurance';
+import { unwrap } from '@/lib/actions/result';
+import { getCompareBasket, setCompareBasket } from '@/lib/compareBasket';
+import { LoadError } from '@/components/ui/LoadError';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { InsuranceSearchResultItem, formatRegistrationZoneLabel } from '@/types/insurance';
 import {
@@ -30,6 +33,7 @@ function CompareContent() {
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [onlyDifferences, setOnlyDifferences] = useState(false);
   const [isWarningsOpen, setIsWarningsOpen] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const isLoading = loadedKey !== currentKey;
 
@@ -44,19 +48,22 @@ function CompareContent() {
   useEffect(() => {
     let isMounted = true;
     const urlIds = idsParam ? idsParam.split(',').filter(Boolean).slice(0, 4) : [];
-    const targetIds = urlIds.length >= 2 ? urlIds : InsuranceStore.getCompareBasket().slice(0, 4);
+    const targetIds = urlIds.length >= 2 ? urlIds : getCompareBasket().slice(0, 4);
 
     if (urlIds.length >= 2) {
-      InsuranceStore.setCompareBasket(urlIds);
+      setCompareBasket(urlIds);
     }
 
     Promise.resolve()
-      .then(() => (targetIds.length >= 2 ? getComparisonData(targetIds) : null))
+      .then(async () => (targetIds.length >= 2 ? unwrap(await getComparisonAction(targetIds)) : null))
       .then((res) => {
         if (isMounted) {
           setData(res);
           setLoadedKey(currentKey);
         }
+      })
+      .catch((err: Error) => {
+        if (isMounted) setLoadError(err.message);
       });
 
     return () => {
@@ -67,7 +74,7 @@ function CompareContent() {
   const handleRemoveOption = (optionIdToRemove: string) => {
     if (!data) return;
     const remainingIds = data.options.filter((o) => o.id !== optionIdToRemove).map((o) => o.id);
-    InsuranceStore.setCompareBasket(remainingIds);
+    setCompareBasket(remainingIds);
     if (remainingIds.length >= 2) {
       router.push(`/compare?ids=${remainingIds.join(',')}`);
     } else {
@@ -76,13 +83,15 @@ function CompareContent() {
   };
 
   const handleClearAll = () => {
-    InsuranceStore.setCompareBasket([]);
+    setCompareBasket([]);
     router.push('/search');
   };
 
   const handlePrint = () => {
     window.print();
   };
+
+  if (loadError) return <LoadError message={loadError} />;
 
   if (isLoading) {
     return (
@@ -155,7 +164,7 @@ function CompareContent() {
             {sumVal !== null && sumVal !== undefined ? (
               `฿${sumVal.toLocaleString('th-TH')}`
             ) : (
-              <span className="text-slate-400 font-normal">ยังไม่ระบุทุน</span>
+              <span className="text-slate-500 font-normal">ยังไม่ระบุทุน</span>
             )}
           </span>
         );
@@ -364,7 +373,7 @@ function CompareContent() {
             <ArrowLeft className="w-3.5 h-3.5" />
             <span>กลับไปหน้าค้นหา</span>
           </Link>
-          <span className="text-xs text-slate-400">•</span>
+          <span className="text-xs text-slate-500">•</span>
           <span className="text-xs font-bold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-lg">
             {options.length} แผนประกัน
           </span>
@@ -547,7 +556,8 @@ function CompareContent() {
                                 type="button"
                                 onClick={() => handleRemoveOption(opt.id)}
                                 title="นำตัวเลือกนี้ออก"
-                                className="no-print text-slate-400 hover:text-red-600 p-0.5 rounded transition cursor-pointer"
+                                aria-label="นำตัวเลือกนี้ออก"
+                                className="no-print text-slate-500 hover:text-red-600 p-0.5 rounded transition cursor-pointer"
                               >
                                 <X className="w-3 h-3" />
                               </button>
@@ -674,13 +684,13 @@ function CompareContent() {
                                 </div>
                               )}
                               {isNotCovered && (
-                                <span className="text-slate-400 font-normal">ไม่คุ้มครอง</span>
+                                <span className="text-slate-500 font-normal">ไม่คุ้มครอง</span>
                               )}
                               {isOptional && (
                                 <span className="text-amber-800 font-medium">{val.text}</span>
                               )}
                               {!isCovered && !isNotCovered && !isOptional && (
-                                <span className="text-slate-400">ยังไม่ระบุ</span>
+                                <span className="text-slate-500">ยังไม่ระบุ</span>
                               )}
                             </td>
                           );
@@ -712,7 +722,7 @@ function CompareContent() {
               <div className="h-6"></div>
               <div className="border-b border-slate-400 w-3/4 mx-auto"></div>
               <span className="text-slate-600 block">( {userName} / ทีม InsureDesk )</span>
-              <span className="text-slate-400 text-[8.5px] block">วันที่: {dateFormattedThai}</span>
+              <span className="text-slate-500 text-[8.5px] block">วันที่: {dateFormattedThai}</span>
             </div>
 
             {/* Right: Customer Acceptance */}
@@ -728,7 +738,7 @@ function CompareContent() {
               </div>
               <div className="border-b border-slate-400 w-3/4 mx-auto mt-2"></div>
               <span className="text-slate-600 block">ลงชื่อ: ................................................................</span>
-              <span className="text-slate-400 text-[8.5px] block">
+              <span className="text-slate-500 text-[8.5px] block">
                 วันที่: ........ / ........ / {thaiBuddhistYear}
               </span>
             </div>

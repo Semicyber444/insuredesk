@@ -1,74 +1,38 @@
 import {
-  CoverageResolvedItem,
   InsuranceSearchResultItem,
   SearchFilters,
   formatRegistrationZoneLabel,
 } from '@/types/insurance';
-import { InsuranceStore, getBangkokDateString } from '@/lib/store/insuranceStore';
+import { getBangkokDateString } from '@/lib/date';
+import { InsuranceStore } from '@/lib/store/insuranceStore';
+import { resolveCoverages, type CoverageData } from './coverage';
 
-// Helper to resolve coverages for a given price_option and plan_version
-export function resolveCoverages(
-  planVersionId: string,
-  priceOptionId: string
-): CoverageResolvedItem[] {
-  const versionCoverages = InsuranceStore.getVersionCoverages().filter(
-    (vc) => vc.plan_version_id === planVersionId
-  );
-  const overrides = InsuranceStore.getOverrides().filter(
-    (o) => o.price_option_id === priceOptionId
-  );
-  const coverageTypes = InsuranceStore.getCoverageTypes();
+export { resolveCoverages };
 
-  return coverageTypes.map((type) => {
-    const override = overrides.find((o) => o.coverage_type_id === type.id);
-    if (override) {
-      return {
-        coverageTypeId: type.id,
-        code: type.code,
-        name: type.name,
-        category: type.category,
-        status: override.status,
-        limitAmount: override.limit_amount,
-        limitBasis: override.limit_basis,
-        deductibleAmount: override.deductible_amount,
-        terms: override.terms,
-        exclusions: override.exclusions,
-        isOverridden: true,
-      };
-    }
-
-    const base = versionCoverages.find((vc) => vc.coverage_type_id === type.id);
-    return {
-      coverageTypeId: type.id,
-      code: type.code,
-      name: type.name,
-      category: type.category,
-      status: base?.status ?? 'unknown',
-      limitAmount: base?.limit_amount,
-      limitBasis: base?.limit_basis,
-      deductibleAmount: base?.deductible_amount,
-      terms: base?.terms,
-      exclusions: base?.exclusions,
-      isOverridden: false,
-    };
-  }).sort((a, b) => {
-    const typeA = coverageTypes.find((t) => t.id === a.coverageTypeId)?.sort_order ?? 99;
-    const typeB = coverageTypes.find((t) => t.id === b.coverageTypeId)?.sort_order ?? 99;
-    return typeA - typeB;
-  });
+export async function loadCoverageData(): Promise<CoverageData> {
+  const [versionCoverages, overrides, coverageTypes] = await Promise.all([
+    InsuranceStore.getVersionCoverages(),
+    InsuranceStore.getOverrides(),
+    InsuranceStore.getCoverageTypes(),
+  ]);
+  return { versionCoverages, overrides, coverageTypes };
 }
 
 // Convert price options into full search result view
-export function buildSearchResultItems(): InsuranceSearchResultItem[] {
+export async function buildSearchResultItems(): Promise<InsuranceSearchResultItem[]> {
   const results: InsuranceSearchResultItem[] = [];
 
-  const priceOptions = InsuranceStore.getPriceOptions();
-  const rules = InsuranceStore.getEligibilityRules();
-  const versions = InsuranceStore.getVersions();
-  const plans = InsuranceStore.getPlans();
-  const insurers = InsuranceStore.getInsurers();
-  const vehicleModels = InsuranceStore.getVehicleModels();
-  const allDocuments = InsuranceStore.getDocuments();
+  const [priceOptions, rules, versions, plans, insurers, vehicleModels, allDocuments, coverageData] =
+    await Promise.all([
+      InsuranceStore.getPriceOptions(),
+      InsuranceStore.getEligibilityRules(),
+      InsuranceStore.getVersions(),
+      InsuranceStore.getPlans(),
+      InsuranceStore.getInsurers(),
+      InsuranceStore.getVehicleModels(),
+      InsuranceStore.getDocuments(),
+      loadCoverageData(),
+    ]);
 
   // Find the latest active published version for each plan (Section 12.3)
   const latestPublishedVersionByPlan = new Map<string, string>();
@@ -103,7 +67,7 @@ export function buildSearchResultItems(): InsuranceSearchResultItem[] {
       ? vehicleModels.find((v) => v.id === rule.vehicle_model_id)
       : null;
 
-    const coverages = resolveCoverages(version.id, option.id);
+    const coverages = resolveCoverages(version.id, option.id, coverageData);
     const documents = allDocuments.filter((d) => d.plan_version_id === version.id);
 
     results.push({
@@ -161,7 +125,7 @@ export function buildSearchResultItems(): InsuranceSearchResultItem[] {
 }
 
 export async function searchInsuranceOptions(filters: SearchFilters = {}) {
-  const allItems = buildSearchResultItems();
+  const allItems = await buildSearchResultItems();
   const today = getBangkokDateString(0);
 
   const filtered = allItems.filter((item) => {
@@ -333,6 +297,6 @@ export async function searchInsuranceOptions(filters: SearchFilters = {}) {
 }
 
 export async function getPriceOptionById(priceOptionId: string): Promise<InsuranceSearchResultItem | null> {
-  const all = buildSearchResultItems();
+  const all = await buildSearchResultItems();
   return all.find((item) => item.id === priceOptionId) ?? null;
 }

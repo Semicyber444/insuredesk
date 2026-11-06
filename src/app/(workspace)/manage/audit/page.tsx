@@ -2,7 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { getAuditLogs } from '@/lib/queries/audit';
+import { getAuditLogsAction } from '@/lib/actions/insurance';
+import { unwrap } from '@/lib/actions/result';
+import { LoadError } from '@/components/ui/LoadError';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { AuditLog } from '@/types/database';
 import { History, Clock, Lock } from 'lucide-react';
@@ -11,20 +13,29 @@ export default function AuditPage() {
   const { can } = useAuth();
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const canView = can('canViewAudit');
 
   useEffect(() => {
+    if (!canView) return;
     let isMounted = true;
-    getAuditLogs().then((res) => {
-      if (!isMounted) return;
-      setLogs(res);
-      setIsLoading(false);
-    });
+    getAuditLogsAction()
+      .then(unwrap)
+      .then((res) => {
+        if (!isMounted) return;
+        setLogs(res);
+        setIsLoading(false);
+      })
+      .catch((err: Error) => {
+        if (isMounted) setLoadError(err.message);
+      });
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [canView]);
 
-  if (!can('canViewAudit')) {
+  if (!canView) {
     return (
       <div className="max-w-xl mx-auto px-4 py-20 text-center space-y-3">
         <div className="w-14 h-14 rounded-2xl bg-red-50 text-red-600 border border-red-200 flex items-center justify-center mx-auto">
@@ -43,6 +54,8 @@ export default function AuditPage() {
       </div>
     );
   }
+
+  if (loadError) return <LoadError message={loadError} />;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
@@ -71,7 +84,7 @@ export default function AuditPage() {
                       {log.actor_name || 'ระบบอัตโนมัติ'}
                     </span>
                     <span>•</span>
-                    <span className="text-[11px] font-mono text-slate-400">ID: {log.id}</span>
+                    <span className="text-[11px] font-mono text-slate-500">ID: {log.id}</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <Clock className="w-3.5 h-3.5" />
