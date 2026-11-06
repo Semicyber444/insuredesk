@@ -24,6 +24,8 @@ async function connect() {
   const server = await mysql.createConnection({
     host: url.hostname,
     port: Number(url.port || 3306),
+    // MAMP turns TCP off; the app's pool reads the same ?socketPath= from the URL.
+    socketPath: url.searchParams.get('socketPath') || undefined,
     user: decodeURIComponent(url.username),
     password: decodeURIComponent(url.password),
     multipleStatements: true,

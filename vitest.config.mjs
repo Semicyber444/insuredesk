@@ -6,6 +6,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   test: {
+    // Only this checkout's tests, not copies under .claude/worktrees/.
+    include: ['tests/**/*.test.ts'],
     fileParallelism: false,
     globals: true,
     environment: 'node',
