@@ -1,8 +1,9 @@
 'use client';
 
+import { useState } from 'react';
 import { SearchFilters, PlateFilter } from '@/types/insurance';
 import { Insurer, VehicleModel, CoverageType, InsuranceType, RepairType } from '@/types/database';
-import { Filter, RotateCcw, Search, MapPin } from 'lucide-react';
+import { Filter, RotateCcw, Search, MapPin, ChevronDown } from 'lucide-react';
 
 interface FilterSidebarProps {
   filters: SearchFilters;
@@ -27,6 +28,25 @@ export function FilterSidebar({
   coverageTypes,
   totalResults,
 }: FilterSidebarProps) {
+  // Below lg the filters fold away so results start on the first screen.
+  const [isOpen, setIsOpen] = useState(false);
+
+  const activeCount = [
+    filters.query?.trim(),
+    filters.insuranceTypes?.length,
+    filters.repairTypes?.length,
+    filters.insurerIds?.length,
+    filters.vehicleBrand,
+    filters.vehicleModelId,
+    filters.carAge != null,
+    filters.usageType,
+    filters.registrationPlate,
+    filters.minPremium != null || filters.maxPremium != null,
+    filters.includeUnknownPrice,
+    filters.minSumInsured != null || filters.maxSumInsured != null,
+    filters.requiredCoverageCodes?.length,
+  ].filter(Boolean).length;
+
   const handleReset = () => {
     onFilterChange({
       page: 1,
@@ -67,24 +87,53 @@ export function FilterSidebar({
     : vehicleModels;
 
   return (
-    <aside className="w-full lg:w-80 bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-6">
+    <aside
+      aria-label="ตัวกรองค้นหา"
+      className="w-full lg:w-80 lg:shrink-0 bg-white border border-slate-200 rounded-xl p-5 shadow-xs"
+    >
       {/* Header */}
-      <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-        <div className="flex items-center gap-2 text-slate-800 font-bold text-base">
+      <div className={`flex items-center justify-between gap-3 ${isOpen ? 'pb-3 border-b border-slate-100' : 'lg:pb-3 lg:border-b lg:border-slate-100'}`}>
+        {/* Phone and tablet: the heading opens and closes the panel */}
+        <button
+          type="button"
+          onClick={() => setIsOpen((v) => !v)}
+          aria-expanded={isOpen}
+          aria-controls="filter-panel"
+          className="lg:hidden flex items-center gap-2 text-slate-800 font-bold text-base rounded-lg -m-1 p-1 cursor-pointer focus-visible:outline-2 focus-visible:outline-blue-600"
+        >
+          <Filter className="w-4 h-4 text-blue-600" />
+          <span>ตัวกรองค้นหา</span>
+          {activeCount > 0 && (
+            <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-semibold">
+              ใช้อยู่ {activeCount}
+            </span>
+          )}
+          <ChevronDown
+            aria-hidden="true"
+            className={`w-4 h-4 text-slate-500 transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`}
+          />
+        </button>
+        {/* Desktop: the panel is always open */}
+        <div className="hidden lg:flex items-center gap-2 text-slate-800 font-bold text-base">
           <Filter className="w-4 h-4 text-blue-600" />
           <span>ตัวกรองค้นหา</span>
           <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-semibold">
+            <span className="sr-only">พบ </span>
             {totalResults}
+            <span className="sr-only"> รายการ</span>
           </span>
         </div>
         <button
+          type="button"
           onClick={handleReset}
-          className="text-xs text-slate-500 hover:text-blue-600 flex items-center gap-1 font-medium transition cursor-pointer"
+          className="text-xs text-slate-500 hover:text-blue-600 flex items-center gap-1 font-medium transition cursor-pointer rounded focus-visible:outline-2 focus-visible:outline-blue-600"
         >
           <RotateCcw className="w-3 h-3" />
           ล้างค่า
         </button>
       </div>
+
+      <div id="filter-panel" className={`${isOpen ? 'block' : 'hidden'} lg:block mt-6 space-y-6`}>
 
       {/* 1. Keyword search */}
       <div className="space-y-1.5">
@@ -112,8 +161,9 @@ export function FilterSidebar({
               <button
                 key={type}
                 type="button"
+                aria-pressed={isSelected}
                 onClick={() => toggleInsuranceType(type)}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border text-center transition ${
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border text-center transition cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${
                   isSelected
                     ? 'bg-blue-600 border-blue-600 text-white shadow-xs'
                     : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
@@ -400,7 +450,7 @@ export function FilterSidebar({
             const typesInCat = coverageTypes.filter((c) => c.category === cat);
             return (
               <div key={cat} className="space-y-1">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                <span className="text-[11px] font-semibold text-slate-500 block">
                   หมวด{cat}
                 </span>
                 <div className="space-y-1">
@@ -426,6 +476,7 @@ export function FilterSidebar({
             );
           })}
         </div>
+      </div>
       </div>
     </aside>
   );

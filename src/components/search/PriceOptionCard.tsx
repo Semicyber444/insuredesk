@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { InsuranceSearchResultItem, formatCarAgeRange, formatRegistrationZoneLabel } from '@/types/insurance';
 import { CoverageStatus } from '@/types/database';
-import { CheckCircle2, FileText, ExternalLink, Plus, Check, HelpCircle, MinusCircle, MapPin } from 'lucide-react';
+import { CheckCircle2, FileText, ChevronRight, Plus, Check, HelpCircle, MinusCircle, MapPin } from 'lucide-react';
 
 interface PriceOptionCardProps {
   item: InsuranceSearchResultItem;
@@ -116,7 +116,7 @@ export function PriceOptionCard({
     >
       {/* Top Header: Insurer & Insurance Type */}
       <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-100">
-        <div>
+        <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-bold text-blue-900 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
               {item.insurerName}
@@ -140,16 +140,18 @@ export function PriceOptionCard({
               </span>
             )}
           </div>
-          <h3 className="text-base font-bold text-slate-900 mt-1.5 line-clamp-1">{item.planName}</h3>
+          <h3 className="text-base font-bold text-slate-900 mt-1.5 line-clamp-2 sm:line-clamp-1">{item.planName}</h3>
           <p className="text-xs text-slate-500 line-clamp-1">{item.priceOptionLabel}</p>
         </div>
 
         {/* Compare Checkbox Button */}
         <button
           type="button"
+          aria-pressed={isSelectedForCompare}
           disabled={!isSelectedForCompare && !canSelectMore}
+          title={!isSelectedForCompare && !canSelectMore ? 'เลือกครบ 4 รายการแล้ว' : undefined}
           onClick={() => onToggleCompare(item.id)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+          className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${
             isSelectedForCompare
               ? 'bg-blue-600 text-white shadow-xs'
               : !canSelectMore
@@ -175,7 +177,7 @@ export function PriceOptionCard({
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 py-4 border-b border-slate-100">
         {/* Price */}
         <div>
-          <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">
+          <span className="text-xs font-semibold text-slate-500 block mb-1">
             เบี้ยประกันรวม
           </span>
           {renderPrice()}
@@ -183,7 +185,7 @@ export function PriceOptionCard({
 
         {/* Sum Insured */}
         <div>
-          <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">
+          <span className="text-xs font-semibold text-slate-500 block mb-1">
             ทุนประกันภัย
           </span>
           <div className="text-lg font-bold text-slate-800">
@@ -206,7 +208,7 @@ export function PriceOptionCard({
 
         {/* Deductibles */}
         <div>
-          <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">
+          <span className="text-xs font-semibold text-slate-500 block mb-1">
             ค่าเสียหายส่วนแรก (Deductible)
           </span>
           <div className="text-lg font-bold text-slate-800">
@@ -251,10 +253,10 @@ export function PriceOptionCard({
 
         <Link
           href={`/plans/${item.planId}?optionId=${item.id}`}
-          className="inline-flex items-center gap-1 font-semibold text-blue-600 hover:text-blue-800 transition"
+          className="shrink-0 inline-flex items-center gap-1 font-semibold text-blue-600 hover:text-blue-800 transition rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
         >
           <span>ดูรายละเอียดเต็ม</span>
-          <ExternalLink className="w-3.5 h-3.5" />
+          <ChevronRight aria-hidden="true" className="w-3.5 h-3.5" />
         </Link>
       </div>
     </div>
