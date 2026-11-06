@@ -11,7 +11,7 @@ import { getCompareBasket, setCompareBasket as saveCompareBasket } from '@/lib/c
 import { LoadError } from '@/components/ui/LoadError';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { PlanFormModal } from '@/components/forms/PlanFormModal';
-import { formatRegistrationZoneLabel } from '@/types/insurance';
+import { formatCarAgeRange, formatRegistrationZoneLabel } from '@/types/insurance';
 import {
   ArrowLeft,
   FileText,
@@ -398,7 +398,7 @@ export default function PlanDetailPage({ params, searchParams }: Props) {
                         : 'รองรับรถทั่วไปทุกรุ่นภายใต้เงื่อนไข'}
                     </div>
                     <div className="text-slate-600">
-                      อายุรถ: {r.min_age ?? 1} - {r.max_age ?? 10} ปี ({ageBasisThai})
+                      อายุรถ: {formatCarAgeRange(r.min_age, r.max_age)} ({ageBasisThai})
                     </div>
                     <div className="flex items-center flex-wrap gap-1.5 text-slate-600">
                       <span>ป้ายทะเบียน:</span>

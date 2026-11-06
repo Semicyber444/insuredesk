@@ -55,12 +55,14 @@ export function Navbar() {
               </div>
               <div className="flex flex-col">
                 <span className="text-lg font-black tracking-tight text-blue-900">InsureDesk</span>
-                <span className="text-[10px] text-slate-500 font-medium -mt-1">ระบบเปรียบเทียบประกันรถยนต์</span>
+                <span className="text-[10px] text-slate-500 font-medium -mt-1 whitespace-nowrap xl:hidden">
+                  ระบบเปรียบเทียบประกันรถยนต์
+                </span>
               </div>
             </Link>
 
-            {/* Desktop Navigation */}
-            <nav className="hidden md:flex items-center space-x-1">
+            {/* Desktop Navigation: labels never wrap; below xl they move into the menu */}
+            <nav aria-label="เมนูหลัก" className="hidden xl:flex items-center gap-0.5">
               {navLinks.map((link) => {
                 if (!link.show) return null;
                 const Icon = link.icon;
@@ -69,7 +71,8 @@ export function Navbar() {
                   <Link
                     key={link.href}
                     href={link.href}
-                    className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition ${
+                    aria-current={isActive ? 'page' : undefined}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition focus-visible:outline-2 focus-visible:outline-blue-600 ${
                       isActive
                         ? 'bg-blue-50 text-blue-700 font-semibold'
                         : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
@@ -83,34 +86,17 @@ export function Navbar() {
             </nav>
           </div>
 
-          {/* User Profile & Role Switcher */}
+          {/* User Profile. The demo role switcher lives in the menu: beside every admin link it never fits the bar. */}
           <div className="flex items-center gap-2.5">
-            {!isRealSession && (
-              <div className="hidden xl:flex items-center bg-slate-100 rounded-lg p-1 text-xs">
-                <span className="px-2 text-slate-500 font-medium">สิทธิ์ทดสอบ:</span>
-                {(['admin', 'reviewer', 'editor', 'viewer'] as AppRole[]).map((r) => (
-                  <button
-                    key={r}
-                    type="button"
-                    onClick={() => setActiveRole(r)}
-                    className={`px-2.5 py-1 rounded-md transition font-medium capitalize cursor-pointer ${
-                      activeRole === r
-                        ? 'bg-white text-slate-900 shadow-xs'
-                        : 'text-slate-500 hover:text-slate-800'
-                    }`}
-                  >
-                    {r}
-                  </button>
-                ))}
-              </div>
-            )}
-
             {/* User Pill */}
             <div className="flex items-center gap-2 pl-2 border-l border-slate-200">
-              <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs shrink-0">
+              <div
+                title={`${userName} · ${getRoleLabelThai(activeRole)}`}
+                className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs shrink-0"
+              >
                 {userName.charAt(0)}
               </div>
-              <div className="hidden sm:flex flex-col text-right">
+              <div className="hidden sm:flex xl:hidden flex-col text-right whitespace-nowrap">
                 <span className="text-xs font-semibold text-slate-800">{userName}</span>
                 <span
                   className={`text-[10px] px-1.5 py-0.2 rounded border font-medium ${getRoleBadgeClass(activeRole)}`}
@@ -122,7 +108,8 @@ export function Navbar() {
                 type="button"
                 onClick={handleLogout}
                 title="ออกจากระบบ / สลับบัญชี"
-                className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
+                aria-label="ออกจากระบบ"
+                className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer focus-visible:outline-2 focus-visible:outline-blue-600"
               >
                 <LogOut className="w-4 h-4" />
               </button>
@@ -132,8 +119,9 @@ export function Navbar() {
             <button
               type="button"
               onClick={() => setMobileMenuOpen((v) => !v)}
-              aria-label="เปิดเมนูนำทาง"
-              className="md:hidden p-2 rounded-lg text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+              aria-label={mobileMenuOpen ? 'ปิดเมนูนำทาง' : 'เปิดเมนูนำทาง'}
+              aria-expanded={mobileMenuOpen}
+              className={`${isRealSession ? 'xl:hidden' : ''} p-2 rounded-lg focus-visible:outline-2 focus-visible:outline-blue-600 text-slate-600 hover:bg-slate-100 transition cursor-pointer`}
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
@@ -143,8 +131,9 @@ export function Navbar() {
 
       {/* Mobile Navigation Drawer */}
       {mobileMenuOpen && (
-        <div className="md:hidden border-t border-slate-200 bg-white px-4 py-3 space-y-3 shadow-lg">
-          <nav className="flex flex-col space-y-1">
+        // From xl the links sit in the bar; demo sessions keep the menu for the role switcher.
+        <div className={`${isRealSession ? 'xl:hidden' : ''} border-t border-slate-200 bg-white px-4 py-3 space-y-3 shadow-lg`}>
+          <nav aria-label="เมนูหลัก" className="xl:hidden flex flex-col space-y-1">
             {navLinks.map((link) => {
               if (!link.show) return null;
               const Icon = link.icon;
@@ -154,7 +143,8 @@ export function Navbar() {
                   key={link.href}
                   href={link.href}
                   onClick={() => setMobileMenuOpen(false)}
-                  className={`inline-flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium transition ${
+                  aria-current={isActive ? 'page' : undefined}
+                  className={`inline-flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium transition focus-visible:outline-2 focus-visible:outline-blue-600 ${
                     isActive
                       ? 'bg-blue-50 text-blue-700 font-semibold'
                       : 'text-slate-700 hover:bg-slate-100'
@@ -168,20 +158,21 @@ export function Navbar() {
           </nav>
 
           {!isRealSession && (
-            <div className="pt-2 border-t border-slate-100">
-              <span className="text-[11px] text-slate-500 font-semibold block mb-1.5">
+            <div className="pt-2 border-t border-slate-100 xl:pt-0 xl:border-t-0 xl:max-w-md xl:ml-auto">
+              <span id="demo-role-label" className="text-[11px] text-slate-500 font-semibold block mb-1.5">
                 สลับสิทธิ์ทดสอบ (Demo Role):
               </span>
-              <div className="grid grid-cols-4 gap-1.5 bg-slate-100 p-1 rounded-xl text-xs">
+              <div role="group" aria-labelledby="demo-role-label" className="grid grid-cols-4 gap-1.5 bg-slate-100 p-1 rounded-xl text-xs">
                 {(['admin', 'reviewer', 'editor', 'viewer'] as AppRole[]).map((r) => (
                   <button
                     key={r}
                     type="button"
+                    aria-pressed={activeRole === r}
                     onClick={() => {
                       setActiveRole(r);
                       setMobileMenuOpen(false);
                     }}
-                    className={`py-1.5 rounded-lg font-semibold capitalize transition cursor-pointer ${
+                    className={`py-1.5 rounded-lg font-semibold capitalize transition cursor-pointer focus-visible:outline-2 focus-visible:outline-blue-600 ${
                       activeRole === r ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600'
                     }`}
                   >

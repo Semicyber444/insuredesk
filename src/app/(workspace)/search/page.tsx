@@ -38,6 +38,8 @@ export default function SearchPage() {
 
   const [selectedForCompare, setSelectedForCompare] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  // After the first answer, refetches keep the current list on screen instead of flashing a spinner.
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const handleFilterChange = useCallback((nextFilters: SearchFilters) => {
@@ -79,6 +81,7 @@ export default function SearchPage() {
         if (isMounted) {
           setResults(res);
           setIsLoading(false);
+          setHasLoaded(true);
         }
       })
       .catch((err: Error) => {
@@ -167,10 +170,15 @@ export default function SearchPage() {
         />
 
         {/* Results Stream */}
-        <div className="flex-1 w-full space-y-4">
-          {isLoading ? (
-            <div className="bg-white border border-slate-200 rounded-xl p-12 text-center">
-              <div className="inline-block w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-3"></div>
+        <div
+          aria-busy={isLoading}
+          className={`flex-1 min-w-0 w-full space-y-4 transition-opacity duration-150 ${
+            isLoading && hasLoaded ? 'opacity-60' : 'opacity-100'
+          }`}
+        >
+          {!hasLoaded ? (
+            <div role="status" className="bg-white border border-slate-200 rounded-xl p-12 text-center">
+              <div className="inline-block w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin motion-reduce:animate-none mb-3"></div>
               <p className="text-sm font-medium text-slate-600">กำลังประมวลผลการค้นหา...</p>
             </div>
           ) : results.items.length === 0 ? (
@@ -185,11 +193,11 @@ export default function SearchPage() {
             </div>
           ) : (
             <>
-              <div className="flex items-center justify-between text-xs text-slate-500 px-1">
-                <span>
+              <div className="flex items-center justify-between gap-3 text-xs text-slate-500 px-1">
+                <span aria-live="polite">
                   แสดง {results.items.length} จากทั้งหมด {results.totalCount} รายการ
                 </span>
-                <span>(คลิกปุ่ม &quot;เปรียบเทียบ&quot; เพื่อเลือกเทียบได้สูงสุด 4 รายการ)</span>
+                <span className="hidden sm:inline">(คลิกปุ่ม &quot;เปรียบเทียบ&quot; เพื่อเลือกเทียบได้สูงสุด 4 รายการ)</span>
               </div>
 
               {results.items.map((item) => (
@@ -204,11 +212,13 @@ export default function SearchPage() {
 
               {/* Pagination */}
               {results.totalPages > 1 && (
-                <div className="flex justify-center items-center gap-2 pt-6">
+                <nav aria-label="เลือกหน้าผลการค้นหา" className="flex flex-wrap justify-center items-center gap-2 pt-6">
                   {Array.from({ length: results.totalPages }).map((_, idx) => (
                     <button
                       key={idx}
                       type="button"
+                      aria-label={`หน้า ${idx + 1}`}
+                      aria-current={results.page === idx + 1 ? 'page' : undefined}
                       onClick={() => handleFilterChange({ ...filters, page: idx + 1 })}
                       className={`w-9 h-9 rounded-lg text-xs font-bold transition cursor-pointer ${
                         results.page === idx + 1
@@ -219,7 +229,7 @@ export default function SearchPage() {
                       {idx + 1}
                     </button>
                   ))}
-                </div>
+                </nav>
               )}
             </>
           )}

@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { unlink } from 'node:fs/promises';
+import path from 'node:path';
 import type { PoolConnection } from 'mysql2/promise';
 import {
   AuditLog,
@@ -33,6 +35,32 @@ export interface Actor {
 }
 
 const SYSTEM_ACTOR: Actor = { id: null, name: 'ระบบ' };
+
+const UPLOADED_FILE = /^storage\/documents\/([a-zA-Z0-9._-]+)$/;
+
+/**
+ * Deletes uploaded files that no source document points at any more. Runs after the
+ * transaction commits, so a rollback never loses a file. Paths outside storage/documents
+ * (title-only placeholders, external links) are never touched, and a file another version
+ * still uses (a new version keeps the same file) stays.
+ */
+async function removeUnreferencedFiles(storagePaths: (string | null | undefined)[]): Promise<void> {
+  for (const storagePath of new Set(storagePaths)) {
+    const match = storagePath ? UPLOADED_FILE.exec(storagePath) : null;
+    if (!match || match[1].includes('..')) continue;
+    const stillUsed = await selectRows(getPool(), 'SELECT id FROM source_documents WHERE storage_path = ? LIMIT 1', [
+      storagePath,
+    ]);
+    if (stillUsed.length > 0) continue;
+    try {
+      await unlink(path.join(process.cwd(), 'storage', 'documents', match[1]));
+    } catch (err) {
+      // A missing file is already the goal; anything else is logged, never failing the save.
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') console.error('Could not remove document file:', err);
+    }
+  }
+}
+export const AUDIT_PAGE_SIZE = 200;
 
 export interface CreateOrUpdatePlanPayload {
   planId?: string;
@@ -361,8 +389,18 @@ export class InsuranceStore {
     return rows.length > 0;
   }
 
-  static getAuditLogs(): Promise<AuditLog[]> {
-    return selectRows<AuditLog>(getPool(), 'SELECT * FROM audit_logs ORDER BY created_at DESC, id');
+  /** The newest entries only: the log grows forever, so the full table is never loaded. */
+  static getAuditLogs(limit = AUDIT_PAGE_SIZE): Promise<AuditLog[]> {
+    return selectRows<AuditLog>(getPool(), 'SELECT * FROM audit_logs ORDER BY created_at DESC, id LIMIT ?', [limit]);
+  }
+
+  static getAuditLogsFor(entityIds: string[]): Promise<AuditLog[]> {
+    if (entityIds.length === 0) return Promise.resolve([]);
+    return selectRows<AuditLog>(
+      getPool(),
+      'SELECT * FROM audit_logs WHERE entity_id IN (?) ORDER BY created_at DESC, id',
+      [entityIds]
+    );
   }
 
   static getVehicleModels(): Promise<VehicleModel[]> {
@@ -443,11 +481,14 @@ export class InsuranceStore {
   }
 
   // Comprehensive Create or Edit Plan
-  static createOrUpdatePlan(
+  static async createOrUpdatePlan(
     payload: CreateOrUpdatePlanPayload,
-    actor: Actor = SYSTEM_ACTOR
+    actor: Actor = SYSTEM_ACTOR,
+    // For users who can't publish: only draft or in-review versions may be edited.
+    { unpublishedOnly = false }: { unpublishedOnly?: boolean } = {}
   ): Promise<{ plan: Plan; version: PlanVersion }> {
-    return withTransaction(async (tx) => {
+    let replacedFile: string | null = null;
+    const saved = await withTransaction(async (tx) => {
       const now = new Date().toISOString();
       const todayStr = getBangkokDateString(0);
       const nextYearStr = getBangkokDateString(365);
@@ -494,6 +535,10 @@ export class InsuranceStore {
           [payload.versionId, planId]
         );
         if (!existing) throw new StoreError('ไม่พบรุ่นแพ็กเกจที่ระบุ');
+        // Checked here, under the plan lock, so a publish that lands mid-save can't be overwritten.
+        if (unpublishedOnly && existing.workflow_status !== 'draft' && existing.workflow_status !== 'in_review') {
+          throw new StoreError('แก้ไขได้เฉพาะรุ่นที่ยังไม่เผยแพร่ กรุณาสร้างรุ่นใหม่แทน');
+        }
         const changes = {
           workflow_status: targetStatus,
           effective_from: payload.effectiveFrom !== undefined ? payload.effectiveFrom : existing.effective_from,
@@ -550,8 +595,9 @@ export class InsuranceStore {
       const ruleFields = {
         scope_type: resolvedScope,
         vehicle_model_id: resolvedScope === 'specific_model' ? payload.vehicleModelId || null : null,
-        min_age: payload.minCarAge ?? 1,
-        max_age: payload.maxCarAge ?? 10,
+        // null means "no limit"; only a missing value falls back to the default.
+        min_age: payload.minCarAge !== undefined ? payload.minCarAge : 1,
+        max_age: payload.maxCarAge !== undefined ? payload.maxCarAge : 10,
         age_basis: payload.ageBasis !== undefined ? payload.ageBasis : existingRule?.age_basis ?? 'registration_year',
         usage_type: payload.usageType || 'private',
         registration_zone:
@@ -740,6 +786,9 @@ export class InsuranceStore {
         );
         const effectiveTitle = trimmedDocTitle || `${plan.name} (เอกสารอ้างอิง)`;
         if (prevDoc) {
+          if (payload.documentStoragePath !== undefined && payload.documentStoragePath !== prevDoc.storage_path) {
+            replacedFile = prevDoc.storage_path;
+          }
           await updateRow(tx, 'source_documents', prevDoc.id, {
             source_type: payload.sourceType || prevDoc.source_type || 'rate_sheet',
             title: effectiveTitle,
@@ -789,14 +838,17 @@ export class InsuranceStore {
 
       return { plan, version };
     });
+    await removeUnreferencedFiles([replacedFile]);
+    return saved;
   }
 
   /**
    * Section 8.1: Published plans must be archived rather than hard-deleted.
    * Unpublished draft-only plans can be deleted along with all child records.
    */
-  static deletePlan(planId: string, actor: Actor = SYSTEM_ACTOR): Promise<{ mode: 'archived' | 'deleted' }> {
-    return withTransaction(async (tx) => {
+  static async deletePlan(planId: string, actor: Actor = SYSTEM_ACTOR): Promise<{ mode: 'archived' | 'deleted' }> {
+    let deletedFiles: string[] = [];
+    const result = await withTransaction(async (tx) => {
       const target = await lockPlan(tx, planId);
       if (!target) return { mode: 'deleted' as const };
 
@@ -824,6 +876,13 @@ export class InsuranceStore {
       }
 
       // Draft-only plan: foreign keys cascade to versions, rules, options, coverages and documents
+      const docs = await selectRows<{ storage_path: string | null }>(
+        tx,
+        `SELECT d.storage_path FROM source_documents d
+         JOIN plan_versions v ON v.id = d.plan_version_id WHERE v.plan_id = ?`,
+        [planId]
+      );
+      deletedFiles = docs.map((d) => d.storage_path).filter((p): p is string => Boolean(p));
       await execute(tx, 'DELETE FROM plans WHERE id = ?', [planId]);
       await addAuditLog(tx, actor, {
         action: 'delete',
@@ -835,6 +894,8 @@ export class InsuranceStore {
       });
       return { mode: 'deleted' as const };
     });
+    await removeUnreferencedFiles(deletedFiles);
+    return result;
   }
 
   static async restorePlan(planId: string, actor: Actor = SYSTEM_ACTOR): Promise<void> {
@@ -913,8 +974,8 @@ export class InsuranceStore {
         notes: `คัดลอกข้อมูลตั้งต้นจาก "${sourcePlan.name}"`,
         scopeType: sourceRule?.scope_type ?? 'all_models',
         vehicleModelId: sourceRule?.vehicle_model_id ?? null,
-        minCarAge: sourceRule?.min_age ?? 1,
-        maxCarAge: sourceRule?.max_age ?? 10,
+        minCarAge: sourceRule ? sourceRule.min_age ?? null : 1,
+        maxCarAge: sourceRule ? sourceRule.max_age ?? null : 10,
         ageBasis: sourceRule?.age_basis ?? 'registration_year',
         usageType: sourceRule?.usage_type ?? 'private',
         registrationZone: sourceRule?.registration_zone ?? 'all',

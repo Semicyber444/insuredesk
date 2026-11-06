@@ -295,8 +295,3 @@ export async function searchInsuranceOptions(filters: SearchFilters = {}) {
     pageSize,
   };
 }
-
-export async function getPriceOptionById(priceOptionId: string): Promise<InsuranceSearchResultItem | null> {
-  const all = await buildSearchResultItems();
-  return all.find((item) => item.id === priceOptionId) ?? null;
-}

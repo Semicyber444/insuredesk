@@ -1,4 +1,4 @@
-import { Actor, InsuranceStore } from '@/lib/store/insuranceStore';
+import { InsuranceStore } from '@/lib/store/insuranceStore';
 import {
   AuditLog,
   EligibilityRule,
@@ -110,11 +110,13 @@ export async function getPlanBundle(
     : plan.versions;
   const versionIds = new Set(versions.map((v) => v.id));
 
-  const [allRules, allOptions, allDocuments, allAudit, vehicleModels, coverageData] = await Promise.all([
+  const [allRules, allOptions, allDocuments, auditLogs, vehicleModels, coverageData] = await Promise.all([
     InsuranceStore.getEligibilityRules(),
     InsuranceStore.getPriceOptions(),
     InsuranceStore.getDocuments(),
-    access.includeAudit ? InsuranceStore.getAuditLogs() : Promise.resolve<AuditLog[]>([]),
+    access.includeAudit
+      ? InsuranceStore.getAuditLogsFor([plan.id, ...plan.versions.map((v) => v.id)])
+      : Promise.resolve<AuditLog[]>([]),
     InsuranceStore.getVehicleModels(),
     loadCoverageData(),
   ]);
@@ -124,14 +126,13 @@ export async function getPlanBundle(
   const options = allOptions.filter((o) => ruleIds.has(o.eligibility_rule_id));
   const optionIds = new Set(options.map((o) => o.id));
   const versionCoverages = coverageData.versionCoverages.filter((c) => versionIds.has(c.plan_version_id));
-  const allVersionIds = new Set(plan.versions.map((v) => v.id));
 
   return {
     plan: { ...plan, versions },
     rules,
     options,
     documents: allDocuments.filter((d) => versionIds.has(d.plan_version_id)),
-    auditLogs: allAudit.filter((a) => allVersionIds.has(a.entity_id) || a.entity_id === plan.id),
+    auditLogs,
     vehicleModels,
     versionCoverages,
     coverageData: {
@@ -171,31 +172,4 @@ export async function getPendingReviews(): Promise<PendingReviewItem[]> {
       };
     })
     .filter((item) => !item.plan?.is_archived);
-}
-
-export async function submitForReview(
-  versionId: string,
-  reason: string,
-  actor?: Actor
-) {
-  await InsuranceStore.submitForReview(versionId, reason, actor);
-  return { success: true };
-}
-
-export async function publishPlanVersion(
-  versionId: string,
-  reason: string,
-  actor?: Actor
-) {
-  await InsuranceStore.publishPlanVersion(versionId, reason, actor);
-  return { success: true };
-}
-
-export async function rejectPlanVersion(
-  versionId: string,
-  reason: string,
-  actor?: Actor
-) {
-  await InsuranceStore.rejectPlanVersion(versionId, reason, actor);
-  return { success: true };
 }
