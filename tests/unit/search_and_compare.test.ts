@@ -1,3 +1,5 @@
+import { access, mkdir, rm, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import { searchInsuranceOptions, resolveCoverages, loadCoverageData } from '@/lib/queries/search';
 import { generateComparisonWarnings, getComparisonData } from '@/lib/queries/compare';
@@ -488,5 +490,45 @@ describe('Car age limits and audit loading', () => {
     const bundle = await getPlanBundle(a.plan.id, { publishedOnly: false, includeAudit: true });
     expect(bundle!.auditLogs.length).toBeGreaterThan(0);
     expect(bundle!.auditLogs.every((l) => l.entity_id === a.plan.id || l.entity_id === a.version.id)).toBe(true);
+  });
+});
+
+describe('Uploaded document files', () => {
+  const dir = path.join(process.cwd(), 'storage', 'documents');
+  const stored = (name: string) => `storage/documents/${name}`;
+  const exists = (name: string) => access(path.join(dir, name)).then(() => true, () => false);
+  const names = ['test-cleanup-draft.pdf', 'test-cleanup-a.pdf', 'test-cleanup-b.pdf', 'test-cleanup-c.pdf'];
+  const base = {
+    insurerId: '20000000-0000-0000-0000-000000000001',
+    name: 'แผนทดสอบไฟล์',
+    insuranceType: 'ชั้น 1' as const,
+    workflowStatus: 'draft' as const,
+  };
+
+  beforeEach(async () => {
+    await mkdir(dir, { recursive: true });
+    for (const name of names) await writeFile(path.join(dir, name), 'x');
+  });
+  afterAll(async () => {
+    for (const name of names) await rm(path.join(dir, name), { force: true });
+  });
+
+  it('removes the file when a draft plan is deleted', async () => {
+    const { plan } = await InsuranceStore.createOrUpdatePlan({ ...base, documentStoragePath: stored(names[0]) });
+    expect((await InsuranceStore.deletePlan(plan.id)).mode).toBe('deleted');
+    expect(await exists(names[0])).toBe(false);
+  });
+
+  it('keeps a replaced file while another version still uses it', async () => {
+    const [, a, b, c] = names;
+    const { plan, version: v1 } = await InsuranceStore.createOrUpdatePlan({ ...base, documentStoragePath: stored(a) });
+    const { version: v2 } = await InsuranceStore.createOrUpdatePlan({ ...base, planId: plan.id, documentStoragePath: stored(a) });
+
+    await InsuranceStore.createOrUpdatePlan({ ...base, planId: plan.id, versionId: v1.id, documentStoragePath: stored(b) });
+    expect(await exists(a)).toBe(true);
+
+    await InsuranceStore.createOrUpdatePlan({ ...base, planId: plan.id, versionId: v2.id, documentStoragePath: stored(c) });
+    expect(await exists(a)).toBe(false);
+    expect(await exists(b)).toBe(true);
   });
 });

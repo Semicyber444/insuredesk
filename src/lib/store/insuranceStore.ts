@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { unlink } from 'node:fs/promises';
+import path from 'node:path';
 import type { PoolConnection } from 'mysql2/promise';
 import {
   AuditLog,
@@ -33,6 +35,31 @@ export interface Actor {
 }
 
 const SYSTEM_ACTOR: Actor = { id: null, name: 'ระบบ' };
+
+const UPLOADED_FILE = /^storage\/documents\/([a-zA-Z0-9._-]+)$/;
+
+/**
+ * Deletes uploaded files that no source document points at any more. Runs after the
+ * transaction commits, so a rollback never loses a file. Paths outside storage/documents
+ * (title-only placeholders, external links) are never touched, and a file another version
+ * still uses (a new version keeps the same file) stays.
+ */
+async function removeUnreferencedFiles(storagePaths: (string | null | undefined)[]): Promise<void> {
+  for (const storagePath of new Set(storagePaths)) {
+    const match = storagePath ? UPLOADED_FILE.exec(storagePath) : null;
+    if (!match || match[1].includes('..')) continue;
+    const stillUsed = await selectRows(getPool(), 'SELECT id FROM source_documents WHERE storage_path = ? LIMIT 1', [
+      storagePath,
+    ]);
+    if (stillUsed.length > 0) continue;
+    try {
+      await unlink(path.join(process.cwd(), 'storage', 'documents', match[1]));
+    } catch (err) {
+      // A missing file is already the goal; anything else is logged, never failing the save.
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') console.error('Could not remove document file:', err);
+    }
+  }
+}
 export const AUDIT_PAGE_SIZE = 200;
 
 export interface CreateOrUpdatePlanPayload {
@@ -454,13 +481,14 @@ export class InsuranceStore {
   }
 
   // Comprehensive Create or Edit Plan
-  static createOrUpdatePlan(
+  static async createOrUpdatePlan(
     payload: CreateOrUpdatePlanPayload,
     actor: Actor = SYSTEM_ACTOR,
     // For users who can't publish: only draft or in-review versions may be edited.
     { unpublishedOnly = false }: { unpublishedOnly?: boolean } = {}
   ): Promise<{ plan: Plan; version: PlanVersion }> {
-    return withTransaction(async (tx) => {
+    let replacedFile: string | null = null;
+    const saved = await withTransaction(async (tx) => {
       const now = new Date().toISOString();
       const todayStr = getBangkokDateString(0);
       const nextYearStr = getBangkokDateString(365);
@@ -758,6 +786,9 @@ export class InsuranceStore {
         );
         const effectiveTitle = trimmedDocTitle || `${plan.name} (เอกสารอ้างอิง)`;
         if (prevDoc) {
+          if (payload.documentStoragePath !== undefined && payload.documentStoragePath !== prevDoc.storage_path) {
+            replacedFile = prevDoc.storage_path;
+          }
           await updateRow(tx, 'source_documents', prevDoc.id, {
             source_type: payload.sourceType || prevDoc.source_type || 'rate_sheet',
             title: effectiveTitle,
@@ -807,14 +838,17 @@ export class InsuranceStore {
 
       return { plan, version };
     });
+    await removeUnreferencedFiles([replacedFile]);
+    return saved;
   }
 
   /**
    * Section 8.1: Published plans must be archived rather than hard-deleted.
    * Unpublished draft-only plans can be deleted along with all child records.
    */
-  static deletePlan(planId: string, actor: Actor = SYSTEM_ACTOR): Promise<{ mode: 'archived' | 'deleted' }> {
-    return withTransaction(async (tx) => {
+  static async deletePlan(planId: string, actor: Actor = SYSTEM_ACTOR): Promise<{ mode: 'archived' | 'deleted' }> {
+    let deletedFiles: string[] = [];
+    const result = await withTransaction(async (tx) => {
       const target = await lockPlan(tx, planId);
       if (!target) return { mode: 'deleted' as const };
 
@@ -842,6 +876,13 @@ export class InsuranceStore {
       }
 
       // Draft-only plan: foreign keys cascade to versions, rules, options, coverages and documents
+      const docs = await selectRows<{ storage_path: string | null }>(
+        tx,
+        `SELECT d.storage_path FROM source_documents d
+         JOIN plan_versions v ON v.id = d.plan_version_id WHERE v.plan_id = ?`,
+        [planId]
+      );
+      deletedFiles = docs.map((d) => d.storage_path).filter((p): p is string => Boolean(p));
       await execute(tx, 'DELETE FROM plans WHERE id = ?', [planId]);
       await addAuditLog(tx, actor, {
         action: 'delete',
@@ -853,6 +894,8 @@ export class InsuranceStore {
       });
       return { mode: 'deleted' as const };
     });
+    await removeUnreferencedFiles(deletedFiles);
+    return result;
   }
 
   static async restorePlan(planId: string, actor: Actor = SYSTEM_ACTOR): Promise<void> {
