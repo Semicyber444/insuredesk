@@ -27,7 +27,9 @@ export function ComparisonFloatingDock({
   const compareUrl = `/compare?ids=${selectedIds.join(',')}`;
 
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 w-full max-w-4xl px-4 animate-in fade-in slide-in-from-bottom-4 duration-200">
+    // Sticky, not fixed: it rides the bottom of the screen while the results scroll and parks
+    // at the end of them, so it never covers the footer disclaimer.
+    <div className="sticky bottom-4 sm:bottom-6 z-40 mx-auto mt-6 w-full max-w-4xl">
       <div className="bg-slate-900 text-white rounded-2xl p-4 shadow-2xl border border-slate-700 flex flex-col md:flex-row items-center justify-between gap-4">
         {/* Left: Summary & items */}
         <div className="flex items-center gap-3 overflow-x-auto w-full md:w-auto pb-1 md:pb-0">

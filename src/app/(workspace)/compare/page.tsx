@@ -7,6 +7,7 @@ import type { ComparisonResult } from '@/lib/queries/compare';
 import { getComparisonAction } from '@/lib/actions/insurance';
 import { unwrap } from '@/lib/actions/result';
 import { getCompareBasket, setCompareBasket } from '@/lib/compareBasket';
+import { getBangkokDateString } from '@/lib/date';
 import { LoadError } from '@/components/ui/LoadError';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { InsuranceSearchResultItem, formatCarAgeRange, formatRegistrationZoneLabel } from '@/types/insurance';
@@ -96,7 +97,7 @@ function CompareContent() {
   if (isLoading) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-20 text-center space-y-4">
-        <div className="inline-block w-9 h-9 border-3 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+        <div className="inline-block w-9 h-9 border-3 border-blue-600 border-t-transparent rounded-full animate-spin motion-reduce:animate-none"></div>
         <p className="text-xs font-semibold text-slate-700">กำลังจัดทำใบเสนอราคาและตารางเปรียบเทียบ...</p>
       </div>
     );
@@ -298,9 +299,21 @@ function CompareContent() {
     month: 'long',
     day: 'numeric',
   });
-  const validUntilDate = new Date(today);
-  validUntilDate.setDate(validUntilDate.getDate() + 30);
+  // The quote is good for 30 days, but never past the day any compared price or plan version ends.
+  const QUOTE_DAYS = 30;
+  const DAY_MS = 86_400_000;
+  const startOfToday = new Date(`${getBangkokDateString(0)}T00:00:00+07:00`);
+  const quoteEnd = new Date(startOfToday.getTime() + QUOTE_DAYS * DAY_MS);
+  const earliestEnd = options
+    .flatMap((o) => [o.priceValidTo, o.versionEffectiveTo])
+    .filter((d): d is string => Boolean(d))
+    .map((d) => new Date(`${d}T00:00:00+07:00`))
+    .reduce<Date | null>((min, d) => (!min || d < min ? d : min), null);
+  const validUntilDate = earliestEnd && earliestEnd < quoteEnd ? earliestEnd : quoteEnd;
+  const validDays = Math.round((validUntilDate.getTime() - startOfToday.getTime()) / DAY_MS);
+  const isCappedByPlan = validUntilDate !== quoteEnd;
   const validUntilThai = validUntilDate.toLocaleDateString('th-TH', {
+    timeZone: 'Asia/Bangkok',
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -346,6 +359,7 @@ function CompareContent() {
             box-sizing: border-box !important;
           }
           table {
+            min-width: 0 !important; /* the phone-width scroll floor must not shrink the A4 sheet */
             page-break-inside: avoid !important;
             font-size: 8.5pt !important;
           }
@@ -368,7 +382,7 @@ function CompareContent() {
         <div className="flex items-center gap-2">
           <Link
             href="/search"
-            className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-800 transition bg-blue-50 px-3 py-1.5 rounded-xl border border-blue-100"
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-800 transition bg-blue-50 px-3 py-1.5 rounded-xl border border-blue-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             <span>กลับไปหน้าค้นหา</span>
@@ -382,8 +396,10 @@ function CompareContent() {
         <div className="flex items-center gap-2 flex-wrap">
           {/* Differences Toggle */}
           <button
+            type="button"
+            aria-pressed={onlyDifferences}
             onClick={() => setOnlyDifferences(!onlyDifferences)}
-            className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl border transition cursor-pointer ${
+            className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl border transition cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${
               onlyDifferences
                 ? 'bg-blue-600 text-white border-blue-600'
                 : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
@@ -396,8 +412,11 @@ function CompareContent() {
           {/* Warnings Toggle */}
           {warnings.length > 0 && (
             <button
+              type="button"
+              aria-expanded={isWarningsOpen}
+              aria-controls="compare-warnings"
               onClick={() => setIsWarningsOpen(!isWarningsOpen)}
-              className="flex items-center gap-1.5 text-xs font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-3 py-1.5 rounded-xl transition cursor-pointer"
+              className="flex items-center gap-1.5 text-xs font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-3 py-1.5 rounded-xl transition cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600"
             >
               <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
               <span>ข้อสังเกต ({warnings.length})</span>
@@ -406,8 +425,9 @@ function CompareContent() {
 
           {/* Print Button */}
           <button
+            type="button"
             onClick={handlePrint}
-            className="flex items-center gap-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 px-4 py-1.5 rounded-xl shadow-xs transition cursor-pointer"
+            className="flex items-center gap-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 px-4 py-1.5 rounded-xl shadow-xs transition cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
           >
             <Printer className="w-4 h-4" />
             <span>พิมพ์ใบเสนอราคา (A4 1 หน้า)</span>
@@ -415,26 +435,29 @@ function CompareContent() {
 
           {/* Clear Button */}
           <button
+            type="button"
             onClick={handleClearAll}
-            className="flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-red-600 px-2 py-1.5 transition cursor-pointer"
+            className="flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-red-600 px-2 py-1.5 rounded-lg transition cursor-pointer focus-visible:outline-2 focus-visible:outline-blue-600"
             title="ล้างการเปรียบเทียบ"
+            aria-label="ล้างการเปรียบเทียบและกลับไปหน้าค้นหา"
           >
-            <RotateCcw className="w-3.5 h-3.5" />
+            <RotateCcw aria-hidden="true" className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
 
       {/* Screen Warnings Banner (Hidden in Print) */}
       {warnings.length > 0 && isWarningsOpen && (
-        <div className="no-print bg-amber-50/90 border border-amber-200 rounded-xl p-3 shadow-xs space-y-2">
+        <div id="compare-warnings" className="no-print bg-amber-50/90 border border-amber-200 rounded-xl p-3 shadow-xs space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
               <ShieldAlert className="w-4 h-4 text-amber-600" />
               ข้อสังเกตความแตกต่างที่สำคัญ
             </span>
             <button
+              type="button"
               onClick={() => setIsWarningsOpen(false)}
-              className="text-[11px] text-amber-800 hover:underline cursor-pointer"
+              className="text-[11px] text-amber-800 hover:underline cursor-pointer rounded focus-visible:outline-2 focus-visible:outline-amber-600"
             >
               ปิดแถบนี้
             </button>
@@ -482,7 +505,14 @@ function CompareContent() {
             </div>
             <div>
               <span className="font-semibold text-slate-500">การยืนยันราคา: </span>
-              <span className="font-bold text-slate-900">30 วัน (ถึงวันที่ {validUntilThai})</span>
+              {validDays < 0 ? (
+                <span className="font-bold text-red-700">ราคาบางแผนหมดอายุแล้ว (สิ้นสุด {validUntilThai})</span>
+              ) : (
+                <span className="font-bold text-slate-900">
+                  {validDays} วัน (ถึงวันที่ {validUntilThai}
+                  {isCappedByPlan ? ' ตามวันสิ้นสุดราคาของแผน' : ''})
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -508,8 +538,12 @@ function CompareContent() {
         </div>
 
         {/* 3. Formal Side-by-side Quotation Table */}
+        <p className="no-print sm:hidden text-[11px] text-slate-500">เลื่อนตารางไปด้านข้างเพื่อดูทุกตัวเลือก</p>
         <div className="overflow-x-auto">
-          <table className="w-full table-fixed border-collapse border border-slate-300 text-[10px]">
+          <table
+            className="w-full table-fixed border-collapse border border-slate-300 text-[10px]"
+            style={{ minWidth: `${180 + options.length * 150}px` }}
+          >
             {/* Column Width Sizing */}
             <colgroup>
               <col style={{ width: '28%' }} />
@@ -521,7 +555,7 @@ function CompareContent() {
             {/* Table Header: Plan & Price Details */}
             <thead>
               <tr className="bg-slate-100/90 border-b-2 border-slate-300">
-                <th className="p-3 text-center align-middle font-bold text-slate-700 uppercase tracking-wider border-r border-slate-300 bg-slate-50/70">
+                <th className="p-3 text-center align-middle font-bold text-slate-700 border-r border-slate-300 bg-slate-50 max-sm:sticky max-sm:left-0 max-sm:z-10">
                   <div className="flex flex-col items-center justify-center h-full space-y-1">
                     <span className="block text-[11.5px] font-black text-slate-900">
                       รายการเปรียบเทียบ
@@ -556,8 +590,8 @@ function CompareContent() {
                                 type="button"
                                 onClick={() => handleRemoveOption(opt.id)}
                                 title="นำตัวเลือกนี้ออก"
-                                aria-label="นำตัวเลือกนี้ออก"
-                                className="no-print text-slate-500 hover:text-red-600 p-0.5 rounded transition cursor-pointer"
+                                aria-label={`นำตัวเลือกที่ ${idx + 1} (${opt.planName}) ออก`}
+                                className="no-print text-slate-500 hover:text-red-600 p-0.5 rounded transition cursor-pointer focus-visible:outline-2 focus-visible:outline-blue-600"
                               >
                                 <X className="w-3 h-3" />
                               </button>
@@ -609,14 +643,14 @@ function CompareContent() {
             <tbody className="divide-y divide-slate-200">
               {/* GROUP 1: Core Specs & Pricing */}
               <tr className="bg-slate-200/80 font-bold text-slate-900 text-[9.5px]">
-                <td colSpan={options.length + 1} className="py-1 px-2 uppercase tracking-wide">
-                  1. ข้อมูลพื้นฐานและเงื่อนไขราคา (Pricing & Basic Conditions)
+                <td colSpan={options.length + 1} className="py-1 px-2">
+                  <span className="max-sm:sticky max-sm:left-2">1. ข้อมูลพื้นฐานและเงื่อนไขราคา (Pricing & Basic Conditions)</span>
                 </td>
               </tr>
 
               {visibleCoreSpecs.map((spec) => (
                 <tr key={spec.id} className="hover:bg-slate-50/60">
-                  <td className="py-1 px-2 font-semibold text-slate-700 border-r border-slate-300">
+                  <td className="py-1 px-2 font-semibold text-slate-700 border-r border-slate-300 bg-white max-sm:sticky max-sm:left-0 max-sm:z-10">
                     <div className="flex items-center justify-between">
                       <span>{spec.label}</span>
                       {spec.hasDifference && (
@@ -646,15 +680,17 @@ function CompareContent() {
                   <Fragment key={`cat-${cIdx}`}>
                     {/* Category Title Row */}
                     <tr className="bg-slate-200/80 font-bold text-slate-900 text-[9.5px]">
-                      <td colSpan={options.length + 1} className="py-1 px-2 uppercase tracking-wide">
-                        {cIdx + 2}. หมวดความคุ้มครอง: {cat.name}
+                      <td colSpan={options.length + 1} className="py-1 px-2">
+                        <span className="max-sm:sticky max-sm:left-2">
+                          {cIdx + 2}. หมวดความคุ้มครอง: {cat.name}
+                        </span>
                       </td>
                     </tr>
 
                     {/* Category Item Rows */}
                     {itemsToDisplay.map((item) => (
                       <tr key={item.code} className="hover:bg-slate-50/60">
-                        <td className="py-1 px-2 font-medium text-slate-800 border-r border-slate-300">
+                        <td className="py-1 px-2 font-medium text-slate-800 border-r border-slate-300 bg-white max-sm:sticky max-sm:left-0 max-sm:z-10">
                           <div className="flex items-center justify-between">
                             <span>{item.name}</span>
                             {item.hasDifference && (
@@ -730,10 +766,10 @@ function CompareContent() {
               <span className="font-bold text-slate-700 block">ผู้ขอเอาประกันภัย / ลูกค้า (Customer Acceptance)</span>
               <div className="flex items-center justify-center gap-3 text-[9px] pt-0.5">
                 {options.map((opt, i) => (
-                  <label key={opt.id} className="inline-flex items-center gap-1 cursor-pointer">
-                    <span className="w-3 h-3 border border-slate-400 rounded-xs inline-block"></span>
+                  <span key={opt.id} className="inline-flex items-center gap-1">
+                    <span aria-hidden="true" className="w-3 h-3 border border-slate-400 rounded-xs inline-block"></span>
                     <span>เลือกตัวเลือกที่ {i + 1}</span>
-                  </label>
+                  </span>
                 ))}
               </div>
               <div className="border-b border-slate-400 w-3/4 mx-auto mt-2"></div>
@@ -754,7 +790,7 @@ export default function ComparePage() {
     <Suspense
       fallback={
         <div className="max-w-5xl mx-auto px-4 py-20 text-center space-y-3">
-          <div className="inline-block w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+          <div className="inline-block w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin motion-reduce:animate-none"></div>
           <p className="text-xs font-semibold text-slate-600">กำลังโหลดหน้าใบเสนอราคา...</p>
         </div>
       }

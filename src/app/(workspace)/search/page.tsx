@@ -121,11 +121,7 @@ export default function SearchPage() {
   if (loadError) return <LoadError message={loadError} />;
 
   return (
-    <div
-      className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 ${
-        selectedForCompare.length > 0 ? 'pb-48 md:pb-32' : 'pb-8'
-      }`}
-    >
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Page Heading */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
