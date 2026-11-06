@@ -14,6 +14,8 @@ export default function AuditPage() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   const canView = can('canViewAudit');
 
@@ -24,7 +26,8 @@ export default function AuditPage() {
       .then(unwrap)
       .then((res) => {
         if (!isMounted) return;
-        setLogs(res);
+        setLogs(res.logs);
+        setHasMore(res.hasMore);
         setIsLoading(false);
       })
       .catch((err: Error) => {
@@ -34,6 +37,23 @@ export default function AuditPage() {
       isMounted = false;
     };
   }, [canView]);
+
+  const handleLoadMore = async () => {
+    setIsLoadingMore(true);
+    try {
+      const res = unwrap(await getAuditLogsAction(logs.length));
+      // Entries written since the last page push older ones down, so the next page can repeat a few.
+      setLogs((prev) => {
+        const shown = new Set(prev.map((l) => l.id));
+        return [...prev, ...res.logs.filter((l) => !shown.has(l.id))];
+      });
+      setHasMore(res.hasMore);
+    } catch (err) {
+      setLoadError((err as Error).message);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
 
   if (!canView) {
     return (
@@ -65,7 +85,7 @@ export default function AuditPage() {
           <span>บันทึกประวัติการเปลี่ยนแปลง (Audit Logs)</span>
         </h1>
         <p className="text-xs text-slate-500 mt-1">
-          บันทึกการส่งตรวจ การเผยแพร่ การจัดเก็บเข้ากรุ และการแก้ไขทุกรายการเพื่อความโปร่งใสและตรวจสอบย้อนหลังได้ (แสดงเฉพาะรายการล่าสุด ประวัติของแต่ละแพ็กเกจดูได้ในหน้าแพ็กเกจนั้น)
+          บันทึกการส่งตรวจ การเผยแพร่ การจัดเก็บเข้ากรุ และการแก้ไขทุกรายการเพื่อความโปร่งใสและตรวจสอบย้อนหลังได้ (เรียงจากล่าสุด ประวัติของแต่ละแพ็กเกจดูได้ในหน้าแพ็กเกจนั้นด้วย)
         </p>
       </div>
 
@@ -121,6 +141,20 @@ export default function AuditPage() {
           </div>
         )}
       </div>
+
+      {hasMore && (
+        <div className="flex justify-center">
+          <button
+            type="button"
+            onClick={handleLoadMore}
+            disabled={isLoadingMore}
+            aria-busy={isLoadingMore}
+            className="px-4 py-2 rounded-xl text-xs font-bold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition cursor-pointer disabled:cursor-wait disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+          >
+            {isLoadingMore ? 'กำลังโหลด...' : 'โหลดเพิ่ม'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

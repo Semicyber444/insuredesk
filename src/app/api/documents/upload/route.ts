@@ -4,6 +4,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { getCurrentSession } from '@/lib/auth/session';
 import { hasPermission } from '@/lib/permissions/roles';
+import { InsuranceStore } from '@/lib/store/insuranceStore';
 
 const MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024; // 15 MB
 
@@ -68,6 +69,8 @@ export async function POST(request: Request) {
     const buffer = Buffer.from(await fileEntry.arrayBuffer());
     const fullPath = path.join(storageDir, safeFilename);
     await writeFile(fullPath, buffer);
+    // Each upload also clears files that older, never-saved uploads left behind.
+    void InsuranceStore.removeAbandonedUploads().catch((err) => console.error('Upload sweep failed:', err));
 
     return NextResponse.json({
       storagePath: `storage/documents/${safeFilename}`,

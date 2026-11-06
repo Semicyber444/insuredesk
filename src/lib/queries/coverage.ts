@@ -1,41 +1,18 @@
 import { CoverageResolvedItem } from '@/types/insurance';
-import { CoverageType, OptionCoverageOverride, VersionCoverage } from '@/types/database';
+import { CoverageType, VersionCoverage } from '@/types/database';
 
 export interface CoverageData {
   versionCoverages: VersionCoverage[];
-  overrides: OptionCoverageOverride[];
   coverageTypes: CoverageType[];
 }
 
-// Helper to resolve coverages for a given price_option and plan_version
-export function resolveCoverages(
-  planVersionId: string,
-  priceOptionId: string,
-  data: CoverageData
-): CoverageResolvedItem[] {
+// Every coverage type for a plan version, 'unknown' where the version doesn't set it.
+export function resolveCoverages(planVersionId: string, data: CoverageData): CoverageResolvedItem[] {
   const versionCoverages = data.versionCoverages.filter((vc) => vc.plan_version_id === planVersionId);
-  const overrides = data.overrides.filter((o) => o.price_option_id === priceOptionId);
   const coverageTypes = data.coverageTypes;
 
   return coverageTypes
     .map((type) => {
-      const override = overrides.find((o) => o.coverage_type_id === type.id);
-      if (override) {
-        return {
-          coverageTypeId: type.id,
-          code: type.code,
-          name: type.name,
-          category: type.category,
-          status: override.status,
-          limitAmount: override.limit_amount,
-          limitBasis: override.limit_basis,
-          deductibleAmount: override.deductible_amount,
-          terms: override.terms,
-          exclusions: override.exclusions,
-          isOverridden: true,
-        };
-      }
-
       const base = versionCoverages.find((vc) => vc.coverage_type_id === type.id);
       return {
         coverageTypeId: type.id,
@@ -48,7 +25,6 @@ export function resolveCoverages(
         deductibleAmount: base?.deductible_amount,
         terms: base?.terms,
         exclusions: base?.exclusions,
-        isOverridden: false,
       };
     })
     .sort((a, b) => {

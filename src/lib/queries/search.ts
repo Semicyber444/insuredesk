@@ -10,12 +10,11 @@ import { resolveCoverages, type CoverageData } from './coverage';
 export { resolveCoverages };
 
 export async function loadCoverageData(): Promise<CoverageData> {
-  const [versionCoverages, overrides, coverageTypes] = await Promise.all([
+  const [versionCoverages, coverageTypes] = await Promise.all([
     InsuranceStore.getVersionCoverages(),
-    InsuranceStore.getOverrides(),
     InsuranceStore.getCoverageTypes(),
   ]);
-  return { versionCoverages, overrides, coverageTypes };
+  return { versionCoverages, coverageTypes };
 }
 
 // Convert price options into full search result view
@@ -67,7 +66,7 @@ export async function buildSearchResultItems(): Promise<InsuranceSearchResultIte
       ? vehicleModels.find((v) => v.id === rule.vehicle_model_id)
       : null;
 
-    const coverages = resolveCoverages(version.id, option.id, coverageData);
+    const coverages = resolveCoverages(version.id, coverageData);
     const documents = allDocuments.filter((d) => d.plan_version_id === version.id);
 
     results.push({

@@ -14,7 +14,7 @@ export interface ComparisonResult {
     items: {
       code: string;
       name: string;
-      values: Record<string, { status: string; text: string; isOverridden: boolean }>;
+      values: Record<string, { status: string; text: string }>;
       hasDifference: boolean;
     }[];
   }[];
@@ -188,18 +188,16 @@ export async function getComparisonData(optionIds: string[]): Promise<Comparison
 
   const categories = Array.from(categoriesMap.entries()).map(([catName, itemsMap]) => {
     const items = Array.from(itemsMap.values()).map(({ code, name }) => {
-      const values: Record<string, { status: string; text: string; isOverridden: boolean }> = {};
+      const values: Record<string, { status: string; text: string }> = {};
       const distinctTexts = new Set<string>();
 
       for (const opt of selectedOptions) {
         const cov = opt.coverages.find((c) => c.code === code);
         let text = 'ยังไม่ระบุ';
         let status = 'unknown';
-        let isOverridden = false;
 
         if (cov) {
           status = cov.status;
-          isOverridden = cov.isOverridden;
           if (cov.status === 'not_covered') {
             text = 'ไม่คุ้มครอง';
           } else if (cov.status === 'covered') {
@@ -219,7 +217,7 @@ export async function getComparisonData(optionIds: string[]): Promise<Comparison
           }
         }
 
-        values[opt.id] = { status, text, isOverridden };
+        values[opt.id] = { status, text };
         distinctTexts.add(text);
       }
 

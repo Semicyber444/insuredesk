@@ -8,7 +8,7 @@ import { getCoverageTypes, getInsurers, getVehicleModels } from '@/lib/queries/i
 import { getAllPlans, getPendingReviews, getPlanBundle } from '@/lib/queries/plans';
 import { buildSearchResultItems, searchInsuranceOptions } from '@/lib/queries/search';
 import { StoreError } from '@/lib/store/errors';
-import { InsuranceStore, type CreateOrUpdatePlanPayload } from '@/lib/store/insuranceStore';
+import { AUDIT_PAGE_SIZE, InsuranceStore, type CreateOrUpdatePlanPayload } from '@/lib/store/insuranceStore';
 import {
   IdSchema,
   ReasonSchema,
@@ -78,8 +78,14 @@ export async function getPendingReviewsAction() {
   return guarded('canReview', () => getPendingReviews());
 }
 
-export async function getAuditLogsAction() {
-  return guarded('canViewAudit', () => InsuranceStore.getAuditLogs());
+/** One page of the audit log, newest first. `offset` is how many entries the page already shows. */
+export async function getAuditLogsAction(offset = 0) {
+  return guarded('canViewAudit', async () => {
+    const start = Number.isSafeInteger(offset) && offset > 0 ? offset : 0;
+    // One extra row tells the page whether there is more to load.
+    const rows = await InsuranceStore.getAuditLogs(AUDIT_PAGE_SIZE + 1, start);
+    return { logs: rows.slice(0, AUDIT_PAGE_SIZE), hasMore: rows.length > AUDIT_PAGE_SIZE };
+  });
 }
 
 export async function getUsersAction() {

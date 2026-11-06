@@ -1,4 +1,4 @@
-import { access, mkdir, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, rm, utimes, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import { searchInsuranceOptions, resolveCoverages, loadCoverageData } from '@/lib/queries/search';
@@ -96,15 +96,8 @@ describe('1. Search & Filtering Business Rules (Section 10)', () => {
     expect(byModel.items.length).toBe(0);
   });
 
-  it('should apply option_coverage_overrides accurately in resolveCoverages (Section 8.3)', async () => {
-    const coverages = resolveCoverages(
-      '50000000-0000-0000-0000-000000000001',
-      '70000000-0000-0000-0000-000000000003',
-      await loadCoverageData()
-    );
-    const ownDamage = coverages.find((c) => c.code === 'own_damage');
-    expect(ownDamage?.isOverridden).toBe(true);
-    expect(ownDamage?.deductibleAmount).toBe(3000);
+  it('resolves every coverage type for a plan version (Section 8.3)', async () => {
+    const coverages = resolveCoverages('50000000-0000-0000-0000-000000000001', await loadCoverageData());
     expect(coverages.length).toBe(16);
 
     const rollover = coverages.find((c) => c.code === 'rollover_offroad');
@@ -486,6 +479,11 @@ describe('Car age limits and audit loading', () => {
     });
 
     expect(await InsuranceStore.getAuditLogs(1)).toHaveLength(1);
+    // The next page starts where the first stopped, so "load more" never repeats or skips an entry.
+    const [first] = await InsuranceStore.getAuditLogs(1, 0);
+    const [second] = await InsuranceStore.getAuditLogs(1, 1);
+    expect(second.id).not.toBe(first.id);
+    expect((await InsuranceStore.getAuditLogs(2, 0)).map((l) => l.id)).toEqual([first.id, second.id]);
 
     const bundle = await getPlanBundle(a.plan.id, { publishedOnly: false, includeAudit: true });
     expect(bundle!.auditLogs.length).toBeGreaterThan(0);
@@ -530,5 +528,18 @@ describe('Uploaded document files', () => {
     await InsuranceStore.createOrUpdatePlan({ ...base, planId: plan.id, versionId: v2.id, documentStoragePath: stored(c) });
     expect(await exists(a)).toBe(false);
     expect(await exists(b)).toBe(true);
+  });
+
+  it('sweeps old uploads that no document points at, and keeps the rest', async () => {
+    const [unsaved, saved, fresh] = names;
+    await InsuranceStore.createOrUpdatePlan({ ...base, documentStoragePath: stored(saved) });
+    // Backdate only this test's files, so the sweep never reaches real uploads in the same folder.
+    const longAgo = new Date('2000-01-01');
+    for (const name of [unsaved, saved]) await utimes(path.join(dir, name), longAgo, longAgo);
+
+    await InsuranceStore.removeAbandonedUploads(new Date('2001-01-01'));
+    expect(await exists(unsaved)).toBe(false);
+    expect(await exists(saved)).toBe(true);
+    expect(await exists(fresh)).toBe(true);
   });
 });

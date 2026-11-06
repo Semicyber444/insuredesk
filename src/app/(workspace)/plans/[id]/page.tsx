@@ -152,7 +152,7 @@ export default function PlanDetailPage({ params, searchParams }: Props) {
   const activeOptionId = selectedOptionId || initialOptionId || options[0]?.id;
   const selectedOption = options.find((o) => o.id === activeOptionId) || options[0];
   const coverages =
-    activeVersion && selectedOption ? resolveCoverages(activeVersion.id, selectedOption.id, bundle.coverageData) : [];
+    activeVersion && selectedOption ? resolveCoverages(activeVersion.id, bundle.coverageData) : [];
 
   const isInBasket = selectedOption ? compareBasket.includes(selectedOption.id) : false;
 
@@ -541,7 +541,7 @@ export default function PlanDetailPage({ params, searchParams }: Props) {
           </div>
         </div>
 
-        {/* Right Column: Full Coverages & Overrides */}
+        {/* Right Column: Full Coverages */}
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100">
@@ -567,11 +567,6 @@ export default function PlanDetailPage({ params, searchParams }: Props) {
                   <div className="space-y-0.5">
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-slate-800">{cov.name}</span>
-                      {cov.isOverridden && (
-                        <span className="text-[10px] font-semibold bg-purple-100 text-purple-800 px-1.5 py-0.2 rounded">
-                          Override เฉพาะตัวเลือกนี้
-                        </span>
-                      )}
                     </div>
                     {cov.terms && <p className="text-slate-500 text-[11px]">{cov.terms}</p>}
                     {cov.exclusions && (

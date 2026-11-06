@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { unlink } from 'node:fs/promises';
+import { readdir, stat, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import type { PoolConnection } from 'mysql2/promise';
 import {
@@ -11,7 +11,6 @@ import {
   InsuranceType,
   Insurer,
   Json,
-  OptionCoverageOverride,
   Plan,
   PlanVersion,
   PriceOption,
@@ -60,6 +59,9 @@ async function removeUnreferencedFiles(storagePaths: (string | null | undefined)
     }
   }
 }
+/** How long an uploaded file may sit unused before it counts as left behind by a cancelled form. */
+const ABANDONED_UPLOAD_MS = 7 * 86_400_000;
+
 export const AUDIT_PAGE_SIZE = 200;
 
 export interface CreateOrUpdatePlanPayload {
@@ -367,10 +369,6 @@ export class InsuranceStore {
     return selectRows<VersionCoverage>(getPool(), 'SELECT * FROM version_coverages');
   }
 
-  static getOverrides(): Promise<OptionCoverageOverride[]> {
-    return selectRows<OptionCoverageOverride>(getPool(), 'SELECT * FROM option_coverage_overrides');
-  }
-
   static getDocuments(): Promise<SourceDocument[]> {
     return selectRows<SourceDocument>(getPool(), 'SELECT * FROM source_documents ORDER BY created_at DESC, id');
   }
@@ -390,8 +388,38 @@ export class InsuranceStore {
   }
 
   /** The newest entries only: the log grows forever, so the full table is never loaded. */
-  static getAuditLogs(limit = AUDIT_PAGE_SIZE): Promise<AuditLog[]> {
-    return selectRows<AuditLog>(getPool(), 'SELECT * FROM audit_logs ORDER BY created_at DESC, id LIMIT ?', [limit]);
+  static getAuditLogs(limit = AUDIT_PAGE_SIZE, offset = 0): Promise<AuditLog[]> {
+    return selectRows<AuditLog>(
+      getPool(),
+      'SELECT * FROM audit_logs ORDER BY created_at DESC, id LIMIT ? OFFSET ?',
+      [limit, offset]
+    );
+  }
+
+  /**
+   * The upload writes its file before the form is saved, so a cancelled or abandoned form leaves
+   * the file behind. Deletes such files once they are older than `olderThan` and no source
+   * document points at them.
+   * shortcut: a form left open longer than 7 days and then saved points at a deleted file; widen
+   * ABANDONED_UPLOAD_MS if editors keep forms open that long.
+   */
+  static async removeAbandonedUploads(olderThan = new Date(Date.now() - ABANDONED_UPLOAD_MS)): Promise<void> {
+    const dir = path.join(process.cwd(), 'storage', 'documents');
+    const names = await readdir(dir).catch(() => [] as string[]);
+    const old: string[] = [];
+    for (const name of names) {
+      const info = await stat(path.join(dir, name)).catch(() => null);
+      if (info?.isFile() && info.mtime < olderThan) old.push(`storage/documents/${name}`);
+    }
+    if (old.length === 0) return;
+    const used = await selectRows<{ storage_path: string }>(
+      getPool(),
+      'SELECT DISTINCT storage_path FROM source_documents WHERE storage_path IN (?)',
+      [old]
+    );
+    const usedPaths = new Set(used.map((r) => r.storage_path));
+    // removeUnreferencedFiles checks each path again, so a save landing in between keeps its file.
+    await removeUnreferencedFiles(old.filter((p) => !usedPaths.has(p)));
   }
 
   static getAuditLogsFor(entityIds: string[]): Promise<AuditLog[]> {
@@ -698,7 +726,7 @@ export class InsuranceStore {
         });
       }
 
-      // Update tiers in place so their coverage overrides survive an edit. An id is only honoured
+      // Update tiers in place so their ids survive an edit (compare baskets and links point at them). An id is only honoured
       // when it already belongs to this rule, so a request can't pull in another plan's option.
       const keptOptionIds = new Set<string>();
       for (const { id, fields } of optionInputs) {
