@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { InsuranceSearchResultItem, formatRegistrationZoneLabel } from '@/types/insurance';
+import { InsuranceSearchResultItem, formatCarAgeRange, formatRegistrationZoneLabel } from '@/types/insurance';
 import { CoverageStatus } from '@/types/database';
 import { CheckCircle2, FileText, ExternalLink, Plus, Check, HelpCircle, MinusCircle, MapPin } from 'lucide-react';
 
@@ -200,7 +200,7 @@ export function PriceOptionCard({
               ? `เฉพาะ ${item.vehicleBrand ?? ''} ${item.vehicleModel ?? ''}`.trim()
               : item.scopeType === 'unknown'
               ? 'ยังไม่ระบุขอบเขตรุ่นรถ'
-              : `รองรับรถอายุ ${item.minCarAge ?? 1}-${item.maxCarAge ?? 10} ปี`}
+              : `รองรับรถอายุ ${formatCarAgeRange(item.minCarAge, item.maxCarAge)}`}
           </span>
         </div>
 

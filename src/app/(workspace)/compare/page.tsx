@@ -9,7 +9,7 @@ import { unwrap } from '@/lib/actions/result';
 import { getCompareBasket, setCompareBasket } from '@/lib/compareBasket';
 import { LoadError } from '@/components/ui/LoadError';
 import { useAuth } from '@/lib/auth/AuthContext';
-import { InsuranceSearchResultItem, formatRegistrationZoneLabel } from '@/types/insurance';
+import { InsuranceSearchResultItem, formatCarAgeRange, formatRegistrationZoneLabel } from '@/types/insurance';
 import {
   Columns3,
   AlertTriangle,
@@ -139,7 +139,7 @@ function CompareContent() {
     new Set(
       options.map(
         (o) =>
-          `${o.scopeType}:${o.vehicleModelId ?? ''}:${o.minCarAge ?? 1}-${o.maxCarAge ?? 10}:${
+          `${o.scopeType}:${o.vehicleModelId ?? ''}:${o.minCarAge ?? ''}-${o.maxCarAge ?? ''}:${
             o.registrationZone ?? 'all'
           }`
       )
@@ -226,7 +226,7 @@ function CompareContent() {
             ? `เฉพาะ ${opt.vehicleBrand ?? ''} ${opt.vehicleModel ?? ''}`.trim()
             : opt.scopeType === 'unknown'
             ? 'ยังไม่ระบุขอบเขตรุ่นรถ'
-            : `รถทั่วไปอายุ ${opt.minCarAge ?? 1}-${opt.maxCarAge ?? 10} ปี`;
+            : `รถทั่วไปอายุ ${formatCarAgeRange(opt.minCarAge, opt.maxCarAge)}`;
         const zone = opt.registrationZone ?? 'all';
         return (
           <span>
@@ -280,7 +280,7 @@ function CompareContent() {
   })();
 
   const ageSummary = (() => {
-    const ages = new Set(options.map((o) => `อายุ ${o.minCarAge ?? 1} - ${o.maxCarAge ?? 10} ปี`));
+    const ages = new Set(options.map((o) => `อายุ ${formatCarAgeRange(o.minCarAge, o.maxCarAge)}`));
     return ages.size === 1 ? Array.from(ages)[0] : 'แตกต่างกันตามแต่ละแผน';
   })();
 

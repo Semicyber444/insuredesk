@@ -33,6 +33,7 @@ export interface Actor {
 }
 
 const SYSTEM_ACTOR: Actor = { id: null, name: 'ระบบ' };
+export const AUDIT_PAGE_SIZE = 200;
 
 export interface CreateOrUpdatePlanPayload {
   planId?: string;
@@ -361,8 +362,18 @@ export class InsuranceStore {
     return rows.length > 0;
   }
 
-  static getAuditLogs(): Promise<AuditLog[]> {
-    return selectRows<AuditLog>(getPool(), 'SELECT * FROM audit_logs ORDER BY created_at DESC, id');
+  /** The newest entries only: the log grows forever, so the full table is never loaded. */
+  static getAuditLogs(limit = AUDIT_PAGE_SIZE): Promise<AuditLog[]> {
+    return selectRows<AuditLog>(getPool(), 'SELECT * FROM audit_logs ORDER BY created_at DESC, id LIMIT ?', [limit]);
+  }
+
+  static getAuditLogsFor(entityIds: string[]): Promise<AuditLog[]> {
+    if (entityIds.length === 0) return Promise.resolve([]);
+    return selectRows<AuditLog>(
+      getPool(),
+      'SELECT * FROM audit_logs WHERE entity_id IN (?) ORDER BY created_at DESC, id',
+      [entityIds]
+    );
   }
 
   static getVehicleModels(): Promise<VehicleModel[]> {
@@ -445,7 +456,9 @@ export class InsuranceStore {
   // Comprehensive Create or Edit Plan
   static createOrUpdatePlan(
     payload: CreateOrUpdatePlanPayload,
-    actor: Actor = SYSTEM_ACTOR
+    actor: Actor = SYSTEM_ACTOR,
+    // For users who can't publish: only draft or in-review versions may be edited.
+    { unpublishedOnly = false }: { unpublishedOnly?: boolean } = {}
   ): Promise<{ plan: Plan; version: PlanVersion }> {
     return withTransaction(async (tx) => {
       const now = new Date().toISOString();
@@ -494,6 +507,10 @@ export class InsuranceStore {
           [payload.versionId, planId]
         );
         if (!existing) throw new StoreError('ไม่พบรุ่นแพ็กเกจที่ระบุ');
+        // Checked here, under the plan lock, so a publish that lands mid-save can't be overwritten.
+        if (unpublishedOnly && existing.workflow_status !== 'draft' && existing.workflow_status !== 'in_review') {
+          throw new StoreError('แก้ไขได้เฉพาะรุ่นที่ยังไม่เผยแพร่ กรุณาสร้างรุ่นใหม่แทน');
+        }
         const changes = {
           workflow_status: targetStatus,
           effective_from: payload.effectiveFrom !== undefined ? payload.effectiveFrom : existing.effective_from,
@@ -550,8 +567,9 @@ export class InsuranceStore {
       const ruleFields = {
         scope_type: resolvedScope,
         vehicle_model_id: resolvedScope === 'specific_model' ? payload.vehicleModelId || null : null,
-        min_age: payload.minCarAge ?? 1,
-        max_age: payload.maxCarAge ?? 10,
+        // null means "no limit"; only a missing value falls back to the default.
+        min_age: payload.minCarAge !== undefined ? payload.minCarAge : 1,
+        max_age: payload.maxCarAge !== undefined ? payload.maxCarAge : 10,
         age_basis: payload.ageBasis !== undefined ? payload.ageBasis : existingRule?.age_basis ?? 'registration_year',
         usage_type: payload.usageType || 'private',
         registration_zone:
@@ -913,8 +931,8 @@ export class InsuranceStore {
         notes: `คัดลอกข้อมูลตั้งต้นจาก "${sourcePlan.name}"`,
         scopeType: sourceRule?.scope_type ?? 'all_models',
         vehicleModelId: sourceRule?.vehicle_model_id ?? null,
-        minCarAge: sourceRule?.min_age ?? 1,
-        maxCarAge: sourceRule?.max_age ?? 10,
+        minCarAge: sourceRule ? sourceRule.min_age ?? null : 1,
+        maxCarAge: sourceRule ? sourceRule.max_age ?? null : 10,
         ageBasis: sourceRule?.age_basis ?? 'registration_year',
         usageType: sourceRule?.usage_type ?? 'private',
         registrationZone: sourceRule?.registration_zone ?? 'all',

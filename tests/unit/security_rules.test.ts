@@ -191,6 +191,14 @@ describe('Login', () => {
     expect(auth.started).toEqual([]);
   });
 
+  it('lets no more than 10 guesses through when they arrive at once', async () => {
+    await createUser();
+    const results = await Promise.all(Array.from({ length: 25 }, () => loginAction(email, 'wrong')));
+    const locked = results.filter((r) => !r.ok && r.error.includes('หลายครั้งเกินไป'));
+    expect(locked.length).toBeGreaterThanOrEqual(15);
+    expect((await loginAction(email, password)).ok).toBe(false);
+  });
+
   it('locks unknown emails the same way', async () => {
     for (let i = 0; i < 10; i++) await loginAction('nobody@example.com', 'wrong');
     expect(await loginAction('nobody@example.com', 'wrong')).toEqual({

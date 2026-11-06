@@ -326,8 +326,8 @@ function buildInitialModalState(
     if (rule) {
       scopeType = rule.scope_type || 'all_models';
       vehicleModelId = rule.vehicle_model_id || '';
-      minCarAge = rule.min_age ?? 1;
-      maxCarAge = rule.max_age ?? 10;
+      minCarAge = rule.min_age ?? '';
+      maxCarAge = rule.max_age ?? '';
       usageType = (rule.usage_type as 'private' | 'commercial' | 'all') || 'private';
       registrationZone = rule.registration_zone || 'all';
       inspectionRequired = rule.inspection_required ?? false;
@@ -1220,6 +1220,7 @@ function PlanFormModalBody({
                     type="number"
                     min={0}
                     value={minCarAge}
+                    placeholder="ไม่จำกัด"
                     onChange={(e) => setMinCarAge(e.target.value)}
                     className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl"
                   />
@@ -1231,6 +1232,7 @@ function PlanFormModalBody({
                     type="number"
                     min={0}
                     value={maxCarAge}
+                    placeholder="ไม่จำกัด"
                     onChange={(e) => setMaxCarAge(e.target.value)}
                     className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl"
                   />

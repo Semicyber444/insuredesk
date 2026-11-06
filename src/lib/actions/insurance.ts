@@ -3,17 +3,9 @@
 import { z } from 'zod';
 import { getPool, selectRows } from '@/lib/db/mysql';
 import { hasPermission } from '@/lib/permissions/roles';
-import { getAuditLogs } from '@/lib/queries/audit';
 import { getComparisonData } from '@/lib/queries/compare';
 import { getCoverageTypes, getInsurers, getVehicleModels } from '@/lib/queries/insurers';
-import {
-  getAllPlans,
-  getPendingReviews,
-  getPlanBundle,
-  publishPlanVersion,
-  rejectPlanVersion,
-  submitForReview,
-} from '@/lib/queries/plans';
+import { getAllPlans, getPendingReviews, getPlanBundle } from '@/lib/queries/plans';
 import { buildSearchResultItems, searchInsuranceOptions } from '@/lib/queries/search';
 import { StoreError } from '@/lib/store/errors';
 import { InsuranceStore, type CreateOrUpdatePlanPayload } from '@/lib/store/insuranceStore';
@@ -87,7 +79,7 @@ export async function getPendingReviewsAction() {
 }
 
 export async function getAuditLogsAction() {
-  return guarded('canViewAudit', () => getAuditLogs());
+  return guarded('canViewAudit', () => InsuranceStore.getAuditLogs());
 }
 
 export async function getUsersAction() {
@@ -114,20 +106,8 @@ export async function savePlanAction(rawPayload: CreateOrUpdatePlanPayload) {
     const workflowStatus = payload.workflowStatus ?? (canPublish ? 'published' : 'draft');
     const db = getPool();
 
-    if (!canPublish) {
-      if (workflowStatus !== 'draft' && workflowStatus !== 'in_review') {
-        throw new StoreError('คุณไม่มีสิทธิ์เผยแพร่แพ็กเกจ');
-      }
-      if (payload.versionId) {
-        const [version] = await selectRows<{ workflow_status: string }>(
-          db,
-          'SELECT workflow_status FROM plan_versions WHERE id = ?',
-          [payload.versionId]
-        );
-        if (version && version.workflow_status !== 'draft' && version.workflow_status !== 'in_review') {
-          throw new StoreError('แก้ไขได้เฉพาะรุ่นที่ยังไม่เผยแพร่ กรุณาสร้างรุ่นใหม่แทน');
-        }
-      }
+    if (!canPublish && workflowStatus !== 'draft' && workflowStatus !== 'in_review') {
+      throw new StoreError('คุณไม่มีสิทธิ์เผยแพร่แพ็กเกจ');
     }
 
     // Section 8.4: nothing is published without a source document.
@@ -143,7 +123,9 @@ export async function savePlanAction(rawPayload: CreateOrUpdatePlanPayload) {
       }
     }
 
-    return InsuranceStore.createOrUpdatePlan({ ...payload, workflowStatus }, actorOf(session));
+    return InsuranceStore.createOrUpdatePlan({ ...payload, workflowStatus }, actorOf(session), {
+      unpublishedOnly: !canPublish,
+    });
   });
 }
 
@@ -161,19 +143,19 @@ export async function restorePlanAction(planId: string) {
 
 export async function submitForReviewAction(versionId: string, reason: string) {
   return guarded('canSubmitReview', async (session) => {
-    await submitForReview(parseInput(IdSchema, versionId), parseInput(ReasonSchema, reason), actorOf(session));
+    await InsuranceStore.submitForReview(parseInput(IdSchema, versionId), parseInput(ReasonSchema, reason), actorOf(session));
   });
 }
 
 export async function publishVersionAction(versionId: string, reason: string) {
   return guarded('canPublish', async (session) => {
-    await publishPlanVersion(parseInput(IdSchema, versionId), parseInput(ReasonSchema, reason), actorOf(session));
+    await InsuranceStore.publishPlanVersion(parseInput(IdSchema, versionId), parseInput(ReasonSchema, reason), actorOf(session));
   });
 }
 
 export async function rejectVersionAction(versionId: string, reason: string) {
   return guarded('canReview', async (session) => {
-    await rejectPlanVersion(parseInput(IdSchema, versionId), parseInput(ReasonSchema, reason), actorOf(session));
+    await InsuranceStore.rejectPlanVersion(parseInput(IdSchema, versionId), parseInput(ReasonSchema, reason), actorOf(session));
   });
 }
 

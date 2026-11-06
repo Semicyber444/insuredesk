@@ -12,6 +12,14 @@ import {
 
 export type PlateFilter = 'bangkok' | 'metro' | 'upcountry' | 'bangkok_only_strict';
 
+/** An empty bound means no limit on that side, the same way search treats it. */
+export function formatCarAgeRange(min?: number | null, max?: number | null): string {
+  if (min != null && max != null) return `${min}-${max} ปี`;
+  if (min != null) return `${min} ปีขึ้นไป`;
+  if (max != null) return `ไม่เกิน ${max} ปี`;
+  return 'ไม่จำกัด';
+}
+
 export function formatRegistrationZoneLabel(
   zone?: RegistrationZone | null,
   short = false

@@ -3,12 +3,7 @@
 import { verifyPassword } from '@/lib/auth/password.mjs';
 import { DEMO_USER_IDS, isDemoUserId } from '@/lib/auth/demoUsers';
 import { endSession, getCurrentSession, isDemoAuthEnabled, startSession } from '@/lib/auth/session';
-import {
-  clearFailedLogins,
-  isLoginLocked,
-  LOGIN_LOCKED_MESSAGE,
-  recordFailedLogin,
-} from '@/lib/auth/loginThrottle';
+import { clearFailedLogins, LOGIN_LOCKED_MESSAGE, registerLoginAttempt } from '@/lib/auth/loginThrottle';
 import { getPool, selectRows } from '@/lib/db/mysql';
 import { AppRoleSchema, LoginSchema } from '@/lib/validation/schemas';
 import type { AppRole } from '@/types/database';
@@ -38,11 +33,10 @@ export async function loginAction(rawEmail: string, rawPassword: string): Promis
     }
 
     // Applies to unknown emails too, so being locked out doesn't reveal which accounts exist.
-    if (await isLoginLocked(email)) return { ok: false, error: LOGIN_LOCKED_MESSAGE };
+    if (await registerLoginAttempt(email)) return { ok: false, error: LOGIN_LOCKED_MESSAGE };
 
     const matches = await verifyPassword(password, user?.password_hash ?? DUMMY_HASH);
     if (!user || !user.is_active || !user.password_hash || !matches) {
-      await recordFailedLogin(email);
       return { ok: false, error: INVALID_LOGIN };
     }
     await clearFailedLogins(email);

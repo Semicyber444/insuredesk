@@ -1,13 +1,7 @@
 import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import { searchInsuranceOptions, resolveCoverages, loadCoverageData } from '@/lib/queries/search';
 import { generateComparisonWarnings, getComparisonData } from '@/lib/queries/compare';
-import {
-  submitForReview,
-  publishPlanVersion,
-  rejectPlanVersion,
-  getPlanById,
-} from '@/lib/queries/plans';
-import { getAuditLogs } from '@/lib/queries/audit';
+import { getPlanById, getPlanBundle } from '@/lib/queries/plans';
 import { InsuranceStore } from '@/lib/store/insuranceStore';
 import { getPool } from '@/lib/db/mysql';
 import { resetDatabase } from '../support/resetDatabase';
@@ -345,16 +339,16 @@ describe('4. Versioning, Workflow Persistence & Archive Rules (Section 8.1 & 12)
       documentTitle: 'ตารางเบี้ยรุ่น 2',
     });
 
-    await submitForReview(v2.id, 'ส่งตรวจรุ่น 2', { id: null, name: 'กัญญา Editor' });
+    await InsuranceStore.submitForReview(v2.id, 'ส่งตรวจรุ่น 2', { id: null, name: 'กัญญา Editor' });
     let fetched = await getPlanById(plan.id);
     expect(fetched?.versions.find((v) => v.id === v2.id)?.workflow_status).toBe('in_review');
 
-    await rejectPlanVersion(v2.id, 'ขอแก้หมายเหตุ', { id: null, name: 'ปวีณา Reviewer' });
+    await InsuranceStore.rejectPlanVersion(v2.id, 'ขอแก้หมายเหตุ', { id: null, name: 'ปวีณา Reviewer' });
     fetched = await getPlanById(plan.id);
     expect(fetched?.versions.find((v) => v.id === v2.id)?.workflow_status).toBe('draft');
 
-    await submitForReview(v2.id, 'ส่งตรวจรอบสอง', { id: null, name: 'กัญญา Editor' });
-    await publishPlanVersion(v2.id, 'อนุมัติรุ่น 2', { id: null, name: 'ปวีณา Reviewer' });
+    await InsuranceStore.submitForReview(v2.id, 'ส่งตรวจรอบสอง', { id: null, name: 'กัญญา Editor' });
+    await InsuranceStore.publishPlanVersion(v2.id, 'อนุมัติรุ่น 2', { id: null, name: 'ปวีณา Reviewer' });
 
     fetched = await getPlanById(plan.id);
     expect(fetched?.versions.find((v) => v.id === v2.id)?.workflow_status).toBe('published');
@@ -368,7 +362,7 @@ describe('4. Versioning, Workflow Persistence & Archive Rules (Section 8.1 & 12)
     expect(archivedPlan?.is_archived).toBe(true);
 
     // Audit logs must include publish and archive actions
-    const logs = await getAuditLogs();
+    const logs = await InsuranceStore.getAuditLogs();
     expect(logs.some((l) => l.entity_id === v2.id && l.action === 'publish')).toBe(true);
     expect(logs.some((l) => l.entity_id === plan.id && l.action === 'archive')).toBe(true);
   });
@@ -449,5 +443,50 @@ describe('4. Versioning, Workflow Persistence & Archive Rules (Section 8.1 & 12)
     );
     expect(copiedDocs.length).toBe(1);
     expect(copiedDocs[0].source_url).toBe('/api/documents/bki-metro.pdf');
+  });
+});
+
+describe('Car age limits and audit loading', () => {
+  it('keeps an empty max car age as "no limit" through save, search and copy', async () => {
+    const { plan } = await InsuranceStore.createOrUpdatePlan({
+      insurerId: '20000000-0000-0000-0000-000000000001',
+      name: 'แผนไม่จำกัดอายุรถ',
+      insuranceType: 'ชั้น 3',
+      workflowStatus: 'published',
+      minCarAge: 1,
+      maxCarAge: null,
+      documentTitle: 'เอกสาร',
+      priceOptions: [{ repairType: 'garage', premiumTotal: 2500, sumInsuredMax: null }],
+    });
+
+    const oldCar = await searchInsuranceOptions({ carAge: 30, pageSize: 100 });
+    expect(oldCar.items.some((i) => i.planId === plan.id && i.maxCarAge === null)).toBe(true);
+
+    const copied = await InsuranceStore.duplicatePlan(plan.id);
+    const copiedRule = (await InsuranceStore.getEligibilityRules()).find(
+      (r) => r.plan_version_id === copied!.version.id
+    );
+    expect(copiedRule?.max_age).toBeNull();
+  });
+
+  it('loads only the newest audit entries, and only this plan\'s entries for a plan', async () => {
+    const a = await InsuranceStore.createOrUpdatePlan({
+      insurerId: '20000000-0000-0000-0000-000000000001',
+      name: 'แผน A',
+      insuranceType: 'ชั้น 1',
+      workflowStatus: 'draft',
+    });
+    await InsuranceStore.createOrUpdatePlan({
+      insurerId: '20000000-0000-0000-0000-000000000001',
+      name: 'แผน B',
+      insuranceType: 'ชั้น 1',
+      workflowStatus: 'draft',
+    });
+
+    expect(await InsuranceStore.getAuditLogs(1)).toHaveLength(1);
+
+    const bundle = await getPlanBundle(a.plan.id, { publishedOnly: false, includeAudit: true });
+    expect(bundle!.auditLogs.length).toBeGreaterThan(0);
+    expect(bundle!.auditLogs.every((l) => l.entity_id === a.plan.id || l.entity_id === a.version.id)).toBe(true);
   });
 });
