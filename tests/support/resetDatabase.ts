@@ -5,7 +5,6 @@ import mysql from 'mysql2/promise';
 const TABLES = [
   'audit_logs',
   'source_documents',
-  'option_coverage_overrides',
   'version_coverages',
   'price_options',
   'eligibility_rules',

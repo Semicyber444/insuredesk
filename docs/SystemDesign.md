@@ -178,7 +178,6 @@ Browser
 | price_options | ตัวเลือกราคา | id, eligibility_rule_id, label, repair_type, price_type, premium_total, sum_insured_min, sum_insured_max, deductible_amount, deductible_terms, valid_from, valid_to |
 | coverage_types | หมวดความคุ้มครอง | id, code, name, category, sort_order |
 | version_coverages | ความคุ้มครองพื้นฐานของรุ่นแผน | id, plan_version_id, coverage_type_id, status, limit_amount, limit_basis, deductible_amount, terms, exclusions |
-| option_coverage_overrides | ความคุ้มครองที่ต่างในแต่ละตัวเลือก | id, price_option_id, coverage_type_id, status, limit_amount, limit_basis, deductible_amount, terms, exclusions |
 | source_documents | เอกสารและแหล่งอ้างอิง | id, plan_version_id, source_type, storage_path, source_url, title, received_at |
 | audit_logs | ประวัติการเปลี่ยนแปลง | id, actor_id, action, entity_type, entity_id, before_data, after_data, reason, created_at |
 
@@ -189,17 +188,13 @@ Browser
 - รุ่นเงื่อนไขหนึ่งมีหลายกฎรับประกันรถ
 - กฎรับประกันรถหนึ่งมีหลายตัวเลือกราคา
 - รุ่นเงื่อนไขหนึ่งมีหลายความคุ้มครองและเอกสาร
-- ตัวเลือกราคาสามารถกำหนดความคุ้มครองทับค่าพื้นฐานได้
 
-หากไม่มี override ให้ใช้ความคุ้มครองพื้นฐานของรุ่นแผน
-
-หากมี override ให้ใช้ข้อมูล override ทั้งรายการ ไม่รวมค่าบางช่องจากพื้นฐานโดยอัตโนมัติ เพื่อหลีกเลี่ยงการนำเงื่อนไขคนละชุดมาปะปน
+ความคุ้มครองของทุกตัวเลือกราคามาจากความคุ้มครองของรุ่นแผน (ตาราง override รายตัวเลือกถูกตัดออกใน migration 004 เพราะไม่มีหน้าจอแก้ไข)
 
 ### 8.4 ข้อกำหนดความถูกต้อง
 
 - คู่ plan_id และ version_no ต้องไม่ซ้ำ
 - ความคุ้มครองชนิดเดียวกันต้องไม่ซ้ำในรุ่นแผนเดียวกัน
-- override ชนิดเดียวกันต้องไม่ซ้ำในตัวเลือกเดียวกัน
 - ราคา ทุน และอายุรถต้องไม่ติดลบ
 - ค่าขั้นต่ำต้องไม่เกินค่าสูงสุด
 - วันสิ้นสุดต้องไม่ก่อนวันเริ่มต้น
@@ -529,7 +524,6 @@ insurance-team/
 | เงื่อนไขอายุรถอยู่ที่ขอบเขต | จับคู่ตามค่ารวมขอบเขตที่กำหนด |
 | หลักเกณฑ์นับอายุรถไม่ชัดเจน | แสดงว่าต้องตรวจสอบเพิ่มเติม |
 | แผนหรือราคาหมดอายุ | ไม่แสดงในผลค้นหาปกติ |
-| ตัวเลือกมี coverage override | แสดงและกรองจาก override |
 | เปรียบเทียบทุนต่างกัน | แสดงคำเตือน |
 | แก้ไขรุ่น published | ต้องสร้างรุ่นใหม่ |
 | สองคนแก้ข้อมูลร่างพร้อมกัน | แจ้งความขัดแย้ง ไม่บันทึกทับเงียบ ๆ |

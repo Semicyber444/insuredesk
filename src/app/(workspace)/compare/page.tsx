@@ -706,9 +706,6 @@ function CompareContent() {
                                   <span className="font-bold text-slate-900">
                                     {val.text}
                                   </span>
-                                  {val.isOverridden && (
-                                    <span className="text-[8px] text-purple-700 block font-semibold">*เงื่อนไขเฉพาะ</span>
-                                  )}
                                 </div>
                               )}
                               {isNotCovered && (

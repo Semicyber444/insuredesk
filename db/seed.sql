@@ -105,9 +105,6 @@ INSERT INTO version_coverages (id, plan_version_id, coverage_type_id, status, li
   ('e75c7a44-e3b0-9f7f-4948-507d0b5edb93', '50000000-0000-0000-0000-000000000005', '10000000-0000-0000-0000-000000000008', 'covered', 1000000, 'ต่อครั้ง', 0, NULL, NULL, '2026-01-01 00:00:00.000', '2026-01-01 00:00:00.000'),
   ('5ba7a42a-ec75-756e-7874-8077561d05c3', '50000000-0000-0000-0000-000000000005', '10000000-0000-0000-0000-000000000015', 'optional', 20000, 'ต่อครั้ง (ตามที่แจ้งไว้)', 0, 'คุ้มครองอุปกรณ์ตกแต่งตามที่แจ้งไว้ไม่เกิน 20,000 บาท', NULL, '2026-11-05 07:04:29.167', '2026-11-05 07:04:29.168');
 
-INSERT INTO option_coverage_overrides (id, price_option_id, coverage_type_id, status, limit_amount, limit_basis, deductible_amount, terms, exclusions, created_at, updated_at) VALUES
-  ('eb2d19c9-6151-f5c3-abf6-615e9b70ae37', '70000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000001', 'covered', NULL, 'ตามทุนประกัน (มีค่าเสียหายส่วนแรก)', 3000, 'ผู้เอาประกันรับผิดชอบค่าเสียหายส่วนแรก 3,000 บาทแรกต่ออุบัติเหตุที่เป็นฝ่ายผิด', NULL, '2026-01-01 00:00:00.000', '2026-01-01 00:00:00.000');
-
 INSERT INTO source_documents (id, plan_version_id, source_type, storage_path, source_url, title, file_size, mime_type, page_reference, received_at, created_at, created_by) VALUES
   ('80000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000001', 'rate_sheet', 'documents/viriyah/superprotect_2026_rates.pdf', NULL, 'ตารางอัตราเบี้ยประกันภัยวิริยะ ซุปเปอร์โปรเทค 2569 (เอกสารภายใน)', 1450200, 'application/pdf', 'หน้า 3-5 ตารางเบี้ยรถกลุ่ม 3, 4', '2026-01-02', '2026-01-02 00:00:00.000', NULL),
   ('80000000-0000-0000-0000-000000000002', '50000000-0000-0000-0000-000000000002', 'brochure', 'documents/bki/bki_care_2plus_brochure.pdf', NULL, 'โบรชัวร์และตารางความคุ้มครอง BKI Care 2+', 892000, 'application/pdf', 'หน้า 2 เงื่อนไขการรับประกัน', '2026-01-08', '2026-01-08 00:00:00.000', NULL),

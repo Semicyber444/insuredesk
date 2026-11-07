@@ -48,7 +48,6 @@ export interface CoverageResolvedItem {
   deductibleAmount?: number | null;
   terms?: string | null;
   exclusions?: string | null;
-  isOverridden: boolean;
 }
 
 export interface InsuranceSearchResultItem {

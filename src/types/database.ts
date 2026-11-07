@@ -162,20 +162,6 @@ export interface VersionCoverage {
   updated_at: string;
 }
 
-export interface OptionCoverageOverride {
-  id: string;
-  price_option_id: string;
-  coverage_type_id: string;
-  status: CoverageStatus;
-  limit_amount?: number | null;
-  limit_basis?: string | null;
-  deductible_amount?: number | null;
-  terms?: string | null;
-  exclusions?: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
 export interface SourceDocument {
   id: string;
   plan_version_id: string;

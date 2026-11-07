@@ -124,7 +124,6 @@ export async function getPlanBundle(
   const rules = allRules.filter((r) => versionIds.has(r.plan_version_id));
   const ruleIds = new Set(rules.map((r) => r.id));
   const options = allOptions.filter((o) => ruleIds.has(o.eligibility_rule_id));
-  const optionIds = new Set(options.map((o) => o.id));
   const versionCoverages = coverageData.versionCoverages.filter((c) => versionIds.has(c.plan_version_id));
 
   return {
@@ -137,7 +136,6 @@ export async function getPlanBundle(
     versionCoverages,
     coverageData: {
       versionCoverages,
-      overrides: coverageData.overrides.filter((o) => optionIds.has(o.price_option_id)),
       coverageTypes: coverageData.coverageTypes,
     },
   };
