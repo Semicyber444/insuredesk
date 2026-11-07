@@ -386,63 +386,10 @@ describe('4. Versioning, Workflow Persistence & Archive Rules (Section 8.1 & 12)
     expect(docs[0].file_size).toBe(512000);
     expect(docs[0].mime_type).toBe('application/pdf');
   });
-
-  it('should copy/duplicate an insurance plan independently with registrationZone, price tiers, coverages, and document', async () => {
-    const { plan: sourcePlan, version: sourceVer } = await InsuranceStore.createOrUpdatePlan({
-      insurerId: '20000000-0000-0000-0000-000000000003',
-      name: 'BKI Metro Special 2+',
-      insuranceType: 'ชั้น 2+',
-      workflowStatus: 'published',
-      registrationZone: 'bangkok_only',
-      minCarAge: 1,
-      maxCarAge: 12,
-      sourceType: 'rate_sheet',
-      documentTitle: 'BKI Metro Rate Sheet',
-      documentRef: 'หน้า 2',
-      documentStoragePath: 'storage/documents/bki-metro.pdf',
-      documentSourceUrl: '/api/documents/bki-metro.pdf',
-      priceOptions: [
-        { label: 'ทุน 100,000', repairType: 'garage', premiumTotal: 5900, sumInsuredMax: 100000 },
-        { label: 'ทุน 200,000', repairType: 'garage', premiumTotal: 6700, sumInsuredMax: 200000 },
-      ],
-    });
-
-    const copied = await InsuranceStore.duplicatePlan(sourcePlan.id, { id: null, name: 'สมชาย ผู้ดูแลระบบ' });
-    expect(copied).not.toBeNull();
-    expect(copied!.plan.id).not.toBe(sourcePlan.id);
-    expect(copied!.plan.name).toBe('BKI Metro Special 2+ (สำเนา)');
-    expect(copied!.version.workflow_status).toBe('draft');
-    expect(copied!.version.id).not.toBe(sourceVer.id);
-
-    const copiedRule = (await InsuranceStore.getEligibilityRules()).find(
-      (r) => r.plan_version_id === copied!.version.id
-    );
-    expect(copiedRule?.registration_zone).toBe('bangkok_only');
-    expect(copiedRule?.max_age).toBe(12);
-
-    const sourceRule = (await InsuranceStore.getEligibilityRules()).find(
-      (r) => r.plan_version_id === sourceVer.id
-    );
-    const sourceOpts = (await InsuranceStore.getPriceOptions()).filter(
-      (o) => o.eligibility_rule_id === sourceRule?.id
-    );
-    const copiedOpts = (await InsuranceStore.getPriceOptions()).filter(
-      (o) => o.eligibility_rule_id === copiedRule?.id
-    );
-    expect(copiedOpts.length).toBe(2);
-    expect(copiedOpts[0].id).not.toBe(sourceOpts[0].id);
-    expect(copiedOpts[1].sum_insured_max).toBe(200000);
-
-    const copiedDocs = (await InsuranceStore.getDocuments()).filter(
-      (d) => d.plan_version_id === copied!.version.id
-    );
-    expect(copiedDocs.length).toBe(1);
-    expect(copiedDocs[0].source_url).toBe('/api/documents/bki-metro.pdf');
-  });
 });
 
 describe('Car age limits and audit loading', () => {
-  it('keeps an empty max car age as "no limit" through save, search and copy', async () => {
+  it('keeps an empty max car age as "no limit" through save and search', async () => {
     const { plan } = await InsuranceStore.createOrUpdatePlan({
       insurerId: '20000000-0000-0000-0000-000000000001',
       name: 'แผนไม่จำกัดอายุรถ',
@@ -456,12 +403,6 @@ describe('Car age limits and audit loading', () => {
 
     const oldCar = await searchInsuranceOptions({ carAge: 30, pageSize: 100 });
     expect(oldCar.items.some((i) => i.planId === plan.id && i.maxCarAge === null)).toBe(true);
-
-    const copied = await InsuranceStore.duplicatePlan(plan.id);
-    const copiedRule = (await InsuranceStore.getEligibilityRules()).find(
-      (r) => r.plan_version_id === copied!.version.id
-    );
-    expect(copiedRule?.max_age).toBeNull();
   });
 
   it('loads only the newest audit entries, and only this plan\'s entries for a plan', async () => {

@@ -512,7 +512,7 @@ export class InsuranceStore {
   static async createOrUpdatePlan(
     payload: CreateOrUpdatePlanPayload,
     actor: Actor = SYSTEM_ACTOR,
-    // For users who can't publish: only draft or in-review versions may be edited.
+    // For users who can't publish: only drafts may be edited, and a published plan keeps its name, insurer and type.
     { unpublishedOnly = false }: { unpublishedOnly?: boolean } = {}
   ): Promise<{ plan: Plan; version: PlanVersion }> {
     let replacedFile: string | null = null;
@@ -529,6 +529,21 @@ export class InsuranceStore {
       if (payload.planId) {
         const existing = await lockPlan(tx, payload.planId);
         if (!existing) throw new StoreError('ไม่พบแพ็กเกจที่ระบุ');
+        // These fields live on the plan, so changing them changes the published version too.
+        const changesLiveFields =
+          existing.name !== name ||
+          existing.insurer_id !== payload.insurerId ||
+          existing.insurance_type !== payload.insuranceType;
+        if (unpublishedOnly && changesLiveFields) {
+          const live = await selectRows(
+            tx,
+            `SELECT id FROM plan_versions WHERE plan_id = ? AND workflow_status = 'published' LIMIT 1`,
+            [existing.id]
+          );
+          if (live.length > 0) {
+            throw new StoreError('ชื่อแพ็กเกจ บริษัทประกัน และชั้นประกันของแพ็กเกจที่เผยแพร่แล้ว เปลี่ยนได้เฉพาะผู้มีสิทธิ์เผยแพร่');
+          }
+        }
         const changes = {
           insurer_id: payload.insurerId,
           name,
@@ -564,8 +579,9 @@ export class InsuranceStore {
         );
         if (!existing) throw new StoreError('ไม่พบรุ่นแพ็กเกจที่ระบุ');
         // Checked here, under the plan lock, so a publish that lands mid-save can't be overwritten.
-        if (unpublishedOnly && existing.workflow_status !== 'draft' && existing.workflow_status !== 'in_review') {
-          throw new StoreError('แก้ไขได้เฉพาะรุ่นที่ยังไม่เผยแพร่ กรุณาสร้างรุ่นใหม่แทน');
+        // Drafts only: editing an in-review version would let a reviewer publish changes they never saw.
+        if (unpublishedOnly && existing.workflow_status !== 'draft') {
+          throw new StoreError('แก้ไขได้เฉพาะรุ่นฉบับร่าง รุ่นที่ส่งตรวจแล้วต้องให้ผู้ตรวจสอบตีกลับก่อน หรือสร้างรุ่นใหม่แทน');
         }
         const changes = {
           workflow_status: targetStatus,
@@ -945,106 +961,5 @@ export class InsuranceStore {
         reason: `กู้คืนแพ็กเกจ "${target.name}" กลับมาใช้งาน`,
       });
     });
-  }
-
-  static async duplicatePlan(
-    sourcePlanId: string,
-    actor: Actor = SYSTEM_ACTOR
-  ): Promise<{ plan: Plan; version: PlanVersion }> {
-    const db = getPool();
-    const [sourcePlan] = await selectRows<Plan>(db, 'SELECT * FROM plans WHERE id = ?', [sourcePlanId]);
-    if (!sourcePlan) {
-      throw new StoreError('ไม่พบแพ็กเกจต้นฉบับที่ต้องการคัดลอก');
-    }
-
-    const versions = await selectRows<PlanVersion>(
-      db,
-      'SELECT * FROM plan_versions WHERE plan_id = ? ORDER BY version_no DESC',
-      [sourcePlanId]
-    );
-    const sourceVer = versions.find((v) => v.workflow_status === 'published') ?? versions[0];
-
-    const [sourceRule] = sourceVer
-      ? await selectRows<EligibilityRule>(
-          db,
-          'SELECT * FROM eligibility_rules WHERE plan_version_id = ? ORDER BY created_at, id LIMIT 1',
-          [sourceVer.id]
-        )
-      : [];
-    const sourceOptions = sourceRule
-      ? await selectRows<PriceOption>(
-          db,
-          'SELECT * FROM price_options WHERE eligibility_rule_id = ? ORDER BY sort_order, id',
-          [sourceRule.id]
-        )
-      : [];
-    const sourceCoverages = sourceVer
-      ? await selectRows<VersionCoverage>(db, 'SELECT * FROM version_coverages WHERE plan_version_id = ?', [sourceVer.id])
-      : [];
-    const [sourceDoc] = sourceVer
-      ? await selectRows<SourceDocument>(
-          db,
-          'SELECT * FROM source_documents WHERE plan_version_id = ? ORDER BY created_at DESC, id LIMIT 1',
-          [sourceVer.id]
-        )
-      : [];
-
-    const coverageTypes = await this.getCoverageTypes();
-
-    return this.createOrUpdatePlan(
-      {
-        insurerId: sourcePlan.insurer_id,
-        name: `${sourcePlan.name} (สำเนา)`,
-        insuranceType: sourcePlan.insurance_type,
-        workflowStatus: 'draft',
-        effectiveFrom: sourceVer?.effective_from ?? getBangkokDateString(0),
-        effectiveTo: sourceVer?.effective_to ?? getBangkokDateString(365),
-        notes: `คัดลอกข้อมูลตั้งต้นจาก "${sourcePlan.name}"`,
-        scopeType: sourceRule?.scope_type ?? 'all_models',
-        vehicleModelId: sourceRule?.vehicle_model_id ?? null,
-        minCarAge: sourceRule ? sourceRule.min_age ?? null : 1,
-        maxCarAge: sourceRule ? sourceRule.max_age ?? null : 10,
-        ageBasis: sourceRule?.age_basis ?? 'registration_year',
-        usageType: sourceRule?.usage_type ?? 'private',
-        registrationZone: sourceRule?.registration_zone ?? 'all',
-        inspectionRequired: sourceRule?.inspection_required ?? false,
-        priceOptions: sourceOptions.map((o) => ({
-          label: o.label,
-          repairType: o.repair_type,
-          priceType: o.price_type,
-          premiumTotal: o.premium_total,
-          sumInsuredMin: o.sum_insured_min,
-          sumInsuredMax: o.sum_insured_max,
-          deductibleAmount: o.deductible_amount,
-          deductibleTerms: o.deductible_terms ?? undefined,
-          driverConditions: o.driver_conditions ?? undefined,
-          compulsoryIncluded: o.compulsory_included,
-          validFrom: o.valid_from,
-          validTo: o.valid_to,
-        })),
-        coverages: sourceCoverages
-          .map((vc) => {
-            const ct = coverageTypes.find((t) => t.id === vc.coverage_type_id);
-            if (!ct) return null;
-            return {
-              code: ct.code,
-              status: vc.status,
-              limitAmount: vc.limit_amount ?? null,
-              limitBasis: vc.limit_basis ?? undefined,
-              terms: vc.terms ?? undefined,
-              exclusions: vc.exclusions ?? undefined,
-            };
-          })
-          .filter((x): x is NonNullable<typeof x> => x !== null),
-        sourceType: sourceDoc?.source_type,
-        documentTitle: sourceDoc?.title,
-        documentRef: sourceDoc?.page_reference ?? undefined,
-        documentStoragePath: sourceDoc?.storage_path ?? null,
-        documentSourceUrl: sourceDoc?.source_url ?? null,
-        documentFileSize: sourceDoc?.file_size ?? null,
-        documentMimeType: sourceDoc?.mime_type ?? null,
-      },
-      actor
-    );
   }
 }
