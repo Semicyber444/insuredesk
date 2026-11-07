@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { UserSession } from '@/lib/auth/session';
 import type { AppRole } from '@/types/database';
-import { getPool } from '@/lib/db/mysql';
+import { getPool, selectRows } from '@/lib/db/mysql';
 import { resetDatabase } from '../support/resetDatabase';
 
 const currentSession = vi.hoisted(() => ({ value: null as unknown }));
@@ -73,6 +73,30 @@ describe('Server Action authorization (replaces Postgres RLS)', () => {
       (await savePlanAction({ ...draftPayload, planId: PLAN_ID, versionId: VERSION_ID, workflowStatus: 'draft' })).ok
     ).toBe(false);
     expect((await savePlanAction({ ...draftPayload, workflowStatus: 'draft' })).ok).toBe(true);
+  });
+
+  it('stops an editor from renaming a published plan or editing a version under review', async () => {
+    const [live] = await selectRows<{ name: string; insurer_id: string; insurance_type: 'ชั้น 1' }>(
+      getPool(),
+      'SELECT name, insurer_id, insurance_type FROM plans WHERE id = ?',
+      [PLAN_ID]
+    );
+    const sameFields = { planId: PLAN_ID, insurerId: live.insurer_id, name: live.name, insuranceType: live.insurance_type };
+    signInAs('editor');
+
+    // A new version of a published plan must not rename the version that is live.
+    expect((await savePlanAction({ ...sameFields, name: `${live.name} (แก้)`, workflowStatus: 'draft' })).ok).toBe(false);
+    const [{ name }] = await selectRows<{ name: string }>(getPool(), 'SELECT name FROM plans WHERE id = ?', [PLAN_ID]);
+    expect(name).toBe(live.name);
+
+    const draft = await savePlanAction({ ...sameFields, workflowStatus: 'draft' });
+    if (!draft.ok) throw new Error(draft.error);
+    const versionId = draft.data.version.id;
+    expect((await savePlanAction({ ...sameFields, versionId, workflowStatus: 'draft' })).ok).toBe(true);
+
+    // Once submitted, the reviewer must see what gets published, so the editor can't change it.
+    expect((await submitForReviewAction(versionId, 'x')).ok).toBe(true);
+    expect((await savePlanAction({ ...sameFields, versionId, workflowStatus: 'in_review' })).ok).toBe(false);
   });
 
   it('hides drafts and audit history from a viewer but not from an admin', async () => {
