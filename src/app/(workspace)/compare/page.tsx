@@ -315,7 +315,7 @@ function CompareContent() {
   ).padStart(2, '0')}-${options[0]?.id.slice(-4) || '01'}`;
 
   return (
-    <div className="max-w-5xl mx-auto px-2 sm:px-4 py-4 sm:py-6 space-y-4">
+    <div className="max-w-5xl mx-auto px-2 sm:px-4 py-4 sm:py-6 space-y-4 print:max-w-none print:p-0">
       {/* Print Specific CSS to Guarantee 1 Page A4 Fit */}
       <style dangerouslySetInnerHTML={{
         __html: `
@@ -326,7 +326,7 @@ function CompareContent() {
           }
           html, body {
             width: 210mm !important;
-            height: 297mm !important;
+            height: auto !important;
             margin: 0 !important;
             padding: 0 !important;
             background: white !important;
@@ -339,6 +339,10 @@ function CompareContent() {
           .no-print {
             display: none !important;
           }
+          /* The workspace shell is one screen tall, which on paper is exactly one page; rounding then adds a blank one. */
+          .min-h-screen {
+            min-height: 0 !important;
+          }
           .a4-quotation-sheet {
             width: 100% !important;
             max-width: 100% !important;
@@ -349,6 +353,9 @@ function CompareContent() {
             page-break-after: avoid !important;
             page-break-inside: avoid !important;
             box-sizing: border-box !important;
+            /* shortcut: a sheet taller than A4 is cut at the bottom instead of starting page 2; shrink the type if long terms ever push the signatures off. */
+            max-height: 296mm !important;
+            overflow: hidden !important;
           }
           table {
             min-width: 0 !important; /* the phone-width scroll floor must not shrink the A4 sheet */
