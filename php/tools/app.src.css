@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: "Geist", "Noto Sans Thai", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, monospace;
+}
+
+@layer components {
+  .card { @apply bg-white rounded-2xl border border-slate-200 shadow-xs; }
+  .btn { @apply inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed; }
+  .btn-primary { @apply bg-blue-600 text-white hover:bg-blue-700; }
+  .btn-dark { @apply bg-slate-900 text-white hover:bg-slate-800; }
+  .btn-green { @apply bg-emerald-600 text-white hover:bg-emerald-700; }
+  .btn-soft { @apply bg-slate-100 text-slate-800 hover:bg-slate-200; }
+  .btn-outline { @apply bg-white border border-slate-200 text-slate-700 hover:bg-slate-50; }
+  .btn-red { @apply bg-red-50 text-red-700 border border-red-200 hover:bg-red-100; }
+  .input { @apply w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500; }
+  .label { @apply font-semibold text-slate-700 block mb-1 text-xs; }
+  .badge { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold; }
+  .alert-red { @apply p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700; }
+  .notice { @apply p-3 rounded-xl bg-blue-50 border border-blue-200 text-xs text-blue-900 flex items-center justify-between gap-3; }
+  .page-title { @apply text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2; }
+  .page-sub { @apply text-xs text-slate-500 mt-1; }
+  .nav-link { @apply inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-100 whitespace-nowrap; }
+  .nav-link[aria-current="page"] { @apply bg-blue-50 text-blue-700; }
+  .chip { @apply px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-[11px] font-bold text-slate-600 cursor-pointer has-checked:bg-blue-600 has-checked:text-white has-checked:border-blue-600 has-focus-visible:ring-2 has-focus-visible:ring-blue-500; }
+  .check-row { @apply flex items-center gap-2 text-xs text-slate-700 cursor-pointer; }
+}
+
+html.only-diff [data-same] { display: none; }
+
+dialog { margin: auto; padding: 0; background: transparent; max-height: 96vh; }
+dialog::backdrop { background: rgb(15 23 42 / 0.6); }
+
+@media print {
+  @page { size: A4 portrait; margin: 0 !important; }
+  html, body {
+    width: 210mm !important; height: auto !important; margin: 0 !important; padding: 0 !important;
+    background: white !important; color: #0f172a !important; font-size: 8.5pt !important; line-height: 1.15 !important;
+    -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;
+  }
+  .no-print { display: none !important; }
+  /* The workspace shell is one screen tall, which on paper is exactly one page; rounding then adds a blank one. */
+  .min-h-screen { min-height: 0 !important; }
+  main { padding: 0 !important; max-width: none !important; }
+  .a4-quotation-sheet {
+    width: 100% !important; max-width: 100% !important; margin: 0 !important; padding: 6mm 8mm !important;
+    border: none !important; box-shadow: none !important; page-break-after: avoid !important; page-break-inside: avoid !important;
+    box-sizing: border-box !important;
+    /* shortcut: a sheet taller than A4 is cut at the bottom instead of starting page 2; shrink the type if long terms push the signatures off. */
+    max-height: 296mm !important; overflow: hidden !important;
+  }
+  table { min-width: 0 !important; page-break-inside: avoid !important; font-size: 8.5pt !important; }
+  tr { page-break-inside: avoid !important; page-break-after: auto !important; }
+  th, td { padding: 1.5px 5px !important; line-height: 1.12 !important; }
+}

@@ -1,0 +1,2 @@
+# Only public/ is web-facing; .env, src/ and storage/ must never be served.
+Require all denied
