@@ -251,6 +251,26 @@ function initCompare() {
   if (!sheet) return;
   App.setBasket(sheet.dataset.compareIds.split(','));
 
+  // Vehicle details are typed per quote; sessionStorage keeps them across reloads in this tab only.
+  let quote = {};
+  try {
+    quote = JSON.parse(sessionStorage.getItem('insuredesk_quote_vehicle')) || {};
+  } catch {
+    // Ignore storage errors
+  }
+  document.querySelectorAll('[data-quote-field]').forEach((field) => {
+    const key = field.dataset.quoteField;
+    if (typeof quote[key] === 'string') field.value = quote[key];
+    field.addEventListener('input', () => {
+      quote[key] = field.value;
+      try {
+        sessionStorage.setItem('insuredesk_quote_vehicle', JSON.stringify(quote));
+      } catch {
+        // Ignore storage errors
+      }
+    });
+  });
+
   document.querySelector('[data-only-diff]').addEventListener('click', (e) => {
     const on = document.documentElement.classList.toggle('only-diff');
     e.currentTarget.setAttribute('aria-pressed', String(on));
@@ -265,6 +285,11 @@ function initCompare() {
   document.querySelector('[data-print]').addEventListener('click', () => window.print());
   document.querySelector('[data-compare-clear]').addEventListener('click', () => {
     App.setBasket([]);
+    try {
+      sessionStorage.removeItem('insuredesk_quote_vehicle');
+    } catch {
+      // Ignore storage errors
+    }
     location.href = `${App.base}/search`;
   });
   document.querySelectorAll('[data-compare-remove]').forEach((b) => b.addEventListener('click', () => {

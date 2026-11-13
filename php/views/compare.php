@@ -97,6 +97,18 @@ $count = count($options);
       </div>
     </div>
   </div>
+  <?php
+  // Typed per quote and kept in this browser tab only; nothing here is stored on the server.
+  $vehicleFields = ['insured' => ['ผู้เอาประกัน', 'Insured Name'], 'make' => ['ยี่ห้อรถ', 'Make'], 'model' => ['รุ่นรถ', 'Model'], 'plate' => ['ทะเบียนรถ', 'License No'], 'year' => ['ปีรถ', 'Year'], 'code' => ['รหัสรถ', 'Code']];
+  // The line below is only true when no compared option names a driver.
+  $unnamedDriver = !array_filter($options, fn($o) => preg_match('/(?<!ไม่)ระบุผู้ขับขี่/u', (string) $o['driverConditions']));
+  ?>
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-3 text-xs">
+    <?php foreach ($vehicleFields as $key => [$thai, $english]): ?>
+      <label class="flex items-baseline gap-2"><span class="shrink-0 font-bold"><?= $thai ?><span class="block font-normal text-[11px] text-slate-500"><?= $english ?></span></span><input type="text" data-quote-field="<?= $key ?>" maxlength="120" autocomplete="off" class="flex-1 min-w-0 border-b border-dotted border-slate-400 font-bold" style="background: transparent"></label>
+    <?php endforeach; ?>
+  </div>
+  <?php if ($unnamedDriver): ?><p class="text-center font-bold text-xs pt-2">เบี้ยประกันภัยที่ระบุในเอกสารนี้ เป็นเบี้ยประกันภัยแบบไม่ระบุผู้ขับขี่</p><?php endif; ?>
   <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 py-3 text-[11px]">
     <?php foreach (['ประเภทการใช้งาน:' => $usage, 'ขอบเขตรุ่นรถยนต์:' => $scope, 'อายุรถยนต์ที่รับประกัน:' => $age, 'การตรวจสภาพรถ:' => $inspection] as $label => $value): ?>
       <div><span class="block text-slate-500"><?= $label ?></span><span class="font-bold"><?= e($value) ?></span></div>
