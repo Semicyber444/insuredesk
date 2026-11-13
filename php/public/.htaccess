@@ -1,0 +1,8 @@
+Require all granted
+<IfModule php_module>
+  php_value upload_max_filesize 16M
+  php_value post_max_size 17M
+</IfModule>
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^ index.php [L,QSA]
